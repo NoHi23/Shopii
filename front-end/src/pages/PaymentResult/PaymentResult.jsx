@@ -4,12 +4,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import { resetPayment, checkPaymentStatus, cancelPaymentPolling } from '../../features/payment/paymentSlice';
 import { motion } from 'framer-motion';
-import { 
-  Box, 
-  Container, 
-  Typography, 
-  Button, 
-  Paper, 
+import {
+  Box,
+  Container,
+  Typography,
+  Button,
+  Paper,
   CircularProgress,
   Divider
 } from "@mui/material";
@@ -30,7 +30,7 @@ const PaymentResult = () => {
     orderId: '',
     message: ''
   });
-  
+
   // Get query parameters from URL
   const query = new URLSearchParams(location.search);
   const queryStatus = query.get('status');
@@ -40,7 +40,7 @@ const PaymentResult = () => {
 
   // Check PayOS specific status
   const payosStatus = query.get('status'); // PAID, CANCELLED, etc.
-  
+
   // Check if payment was already completed via sessionStorage
   useEffect(() => {
     const orderId = locationState.orderId || queryOrderId;
@@ -54,19 +54,19 @@ const PaymentResult = () => {
       }
     }
   }, [locationState.orderId, queryOrderId, dispatch, navigate]);
-  
+
   // Ưu tiên sử dụng location state trước, sau đó là query params
   useEffect(() => {
     const getStatusInfo = async () => {
       setIsVerifying(true);
-      
+
       // Sử dụng thông tin từ URL hoặc state
       let finalStatus = locationState.status || queryStatus;
       const orderId = locationState.orderId || queryOrderId;
       const message = locationState.message || queryMessage;
-      
+
       console.log('Initial payment status info:', { finalStatus, orderId, payosStatus });
-      
+
       // Check if payment is already completed
       if (orderId) {
         const paymentCompleted = sessionStorage.getItem(`payment_${orderId}_completed`);
@@ -82,12 +82,12 @@ const PaymentResult = () => {
           return;
         }
       }
-      
+
       // Đối với PayOS, chúng ta cần dịch trạng thái
       if (payosStatus === 'PAID' || payosStatus === 'SUCCESS' || payosStatus === '00') {
         console.log('PayOS status indicates payment success');
         finalStatus = 'paid';
-        
+
         // Mark the payment as completed in session storage
         if (orderId) {
           sessionStorage.setItem(`payment_${orderId}_completed`, 'true');
@@ -96,7 +96,7 @@ const PaymentResult = () => {
         console.log('PayOS status indicates payment failure');
         finalStatus = 'failed';
       }
-      
+
       // Nếu có orderId nhưng không có status rõ ràng, kiểm tra với API
       if (orderId && (!finalStatus || finalStatus === 'pending')) {
         console.log('Need to verify payment status with API for order:', orderId);
@@ -106,9 +106,9 @@ const PaymentResult = () => {
             if (checkPaymentStatus.fulfilled.match(resultAction)) {
               const data = resultAction.payload;
               const paymentStatus = data?.payment?.status;
-              
+
               console.log('API payment status check result:', paymentStatus);
-              
+
               // Chỉ dựa vào trạng thái thanh toán
               if (paymentStatus === 'paid') {
                 finalStatus = 'paid';
@@ -125,21 +125,21 @@ const PaymentResult = () => {
           console.error('Error verifying payment:', error);
         }
       }
-      
+
       console.log('Final payment status determined:', finalStatus);
-      
+
       // Set final result
       setPaymentResult({
         status: finalStatus || 'unknown',
         orderId: orderId || '',
         message: message || ''
       });
-      
+
       setIsVerifying(false);
     };
-    
+
     getStatusInfo();
-    
+
     // Reset payment state in Redux
     dispatch(resetPayment());
   }, [dispatch, locationState, queryStatus, queryOrderId, queryMessage, payosStatus, token]);
@@ -148,7 +148,7 @@ const PaymentResult = () => {
   useEffect(() => {
     console.log('Payment result page loaded, ensuring all polling is stopped');
     dispatch(cancelPaymentPolling());
-    
+
     // Mark this payment as completed in sessionStorage
     const orderId = locationState.orderId || queryOrderId;
     if (orderId && paymentResult.status === 'paid') {
@@ -156,43 +156,48 @@ const PaymentResult = () => {
       sessionStorage.setItem(`payment_${orderId}_completed`, 'true');
     }
   }, [dispatch, locationState.orderId, queryOrderId, paymentResult.status]);
-  
+
   // Show toast and start countdown after verification
+  // Show toast after verification is complete
   useEffect(() => {
-    if (isVerifying) return;
-    
-    // Show toast based on status
-    if (paymentResult.status === 'paid') {
-      toast.success('Thanh toán thành công!');
-    } else if (paymentResult.status === 'failed') {
-      toast.error('Thanh toán thất bại!');
-    } else {
-      toast.error(paymentResult.message || 'Đã xảy ra lỗi trong quá trình thanh toán.');
-    }
-    
-    let timer;
-    // Start countdown to redirect to home
-    if (countDown > 0) {
-      timer = setInterval(() => {
-        setCountDown(prev => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            navigate('/');
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    
-    // Cleanup function to clear the timer when component unmounts
-    return () => {
-      if (timer) {
-        console.log('Clearing redirect timer');
-        clearInterval(timer);
+    // Chỉ chạy khi quá trình xác minh VỪA MỚI HOÀN TẤT và đã có kết quả
+    if (!isVerifying && paymentResult.status && paymentResult.status !== 'unknown') {
+      if (paymentResult.status === 'paid') {
+        toast.success('Thanh toán thành công!');
+      } else if (paymentResult.status === 'failed') {
+        toast.error('Thanh toán thất bại!');
+      } else {
+        toast.error(paymentResult.message || 'Đã xảy ra lỗi trong quá trình thanh toán.');
       }
+    }
+    // Phụ thuộc vào trạng thái xác minh và kết quả thanh toán. Không phụ thuộc vào countDown.
+  }, [isVerifying, paymentResult.status, paymentResult.message]);
+
+
+  useEffect(() => {
+    // Nếu đang xác minh thì không làm gì cả
+    if (isVerifying) {
+      return;
+    }
+
+    // Bắt đầu đếm ngược
+    const timer = setInterval(() => {
+      setCountDown(prevCount => {
+        if (prevCount <= 1) {
+          clearInterval(timer);
+          navigate('/');
+          return 0;
+        }
+        return prevCount - 1;
+      });
+    }, 1000);
+
+    // Cleanup function: dọn dẹp timer khi component bị unmount
+    return () => {
+      clearInterval(timer);
     };
-  }, [isVerifying, paymentResult, navigate, countDown]);
+    // Chỉ phụ thuộc vào isVerifying và navigate. Tuyệt đối KHÔNG đưa countDown vào đây.
+  }, [isVerifying, navigate]);
   
   // Add another effect to force navigation when leaving the page
   useEffect(() => {
@@ -200,15 +205,15 @@ const PaymentResult = () => {
       // Force cancel any pending operations
       dispatch(resetPayment());
     };
-    
+
     window.addEventListener('beforeunload', handleBeforeUnload);
-    
+
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       dispatch(resetPayment());
     };
   }, [dispatch]);
-  
+
   return (
     <Container maxWidth="md" sx={{ py: 6 }}>
       <motion.div
@@ -216,10 +221,10 @@ const PaymentResult = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <Paper 
-          elevation={3} 
-          sx={{ 
-            p: { xs: 4, md: 6 }, 
+        <Paper
+          elevation={3}
+          sx={{
+            p: { xs: 4, md: 6 },
             borderRadius: 2,
             textAlign: 'center',
             boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
@@ -236,18 +241,18 @@ const PaymentResult = () => {
             <motion.div
               initial={{ scale: 0.8 }}
               animate={{ scale: 1 }}
-              transition={{ 
+              transition={{
                 type: "spring",
                 stiffness: 200,
                 damping: 15
               }}
             >
-              <CheckCircleOutlineIcon 
-                sx={{ 
-                  fontSize: 100, 
+              <CheckCircleOutlineIcon
+                sx={{
+                  fontSize: 100,
                   color: '#4CAF50',
                   mb: 2
-                }} 
+                }}
               />
               <Typography variant="h4" fontWeight={700} gutterBottom>
                 Thanh toán thành công!
@@ -262,9 +267,9 @@ const PaymentResult = () => {
                   </Typography>
                 </Box>
               )}
-              <Box sx={{ 
-                p: 3, 
-                backgroundColor: 'rgba(76, 175, 80, 0.1)', 
+              <Box sx={{
+                p: 3,
+                backgroundColor: 'rgba(76, 175, 80, 0.1)',
                 borderRadius: 2,
                 maxWidth: 400,
                 mx: 'auto',
@@ -279,18 +284,18 @@ const PaymentResult = () => {
             <motion.div
               initial={{ scale: 0.8 }}
               animate={{ scale: 1 }}
-              transition={{ 
+              transition={{
                 type: "spring",
                 stiffness: 200,
                 damping: 15
               }}
             >
-              <CancelOutlinedIcon 
-                sx={{ 
-                  fontSize: 100, 
+              <CancelOutlinedIcon
+                sx={{
+                  fontSize: 100,
                   color: '#F44336',
                   mb: 2
-                }} 
+                }}
               />
               <Typography variant="h4" fontWeight={700} gutterBottom>
                 Thanh toán thất bại!
@@ -302,9 +307,9 @@ const PaymentResult = () => {
                   </Typography>
                 </Box>
               )}
-              <Box sx={{ 
-                p: 3, 
-                backgroundColor: 'rgba(244, 67, 54, 0.1)', 
+              <Box sx={{
+                p: 3,
+                backgroundColor: 'rgba(244, 67, 54, 0.1)',
                 borderRadius: 2,
                 maxWidth: 400,
                 mx: 'auto',
@@ -316,29 +321,29 @@ const PaymentResult = () => {
               </Box>
             </motion.div>
           )}
-          
+
           <Divider sx={{ my: 3 }} />
-          
+
           {!isVerifying && (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 4 }}>
-              <CircularProgress 
-                variant="determinate" 
-                value={(countDown / 5) * 100} 
-                size={24} 
-                sx={{ mr: 2, color: '#0F52BA' }} 
+              <CircularProgress
+                variant="determinate"
+                value={(countDown / 5) * 100}
+                size={24}
+                sx={{ mr: 2, color: '#0F52BA' }}
               />
               <Typography variant="body1" color="text.secondary">
                 Bạn sẽ được chuyển đến trang chủ trong <strong>{countDown}</strong> giây
               </Typography>
             </Box>
           )}
-          
+
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Button
               variant="contained"
               startIcon={<HomeIcon />}
               onClick={() => navigate('/')}
-              sx={{ 
+              sx={{
                 backgroundColor: '#0F52BA',
                 '&:hover': {
                   backgroundColor: '#0A3C8A',
@@ -349,14 +354,14 @@ const PaymentResult = () => {
             >
               Về trang chủ
             </Button>
-            
+
             {paymentResult.status === 'paid' && (
               <Button
                 variant="outlined"
                 startIcon={<ReceiptLongIcon />}
                 component={Link}
                 to="/order-history"
-                sx={{ 
+                sx={{
                   borderColor: '#0F52BA',
                   color: '#0F52BA',
                   '&:hover': {
