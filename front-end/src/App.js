@@ -92,7 +92,7 @@ const router = createBrowserRouter(
   createRoutesFromElements(
     <Route errorElement={<ErrorPage />}>
       <Route path="/" element={<Layout />}>
-        <Route index element={<Home />}></Route> {/* Trang chủ cho buyer */}
+        <Route index element={<Home />}></Route>
         <Route path="/cart" element={<Cart />}></Route>
         <Route path="/checkout" element={<Checkout />}></Route>
         <Route path="/address" element={<Address />}></Route>
@@ -109,7 +109,7 @@ const router = createBrowserRouter(
         <Route path="/create-dispute/:orderItemId" element={<CreateDisputeForm />}></Route>
         <Route path="/return-requests" element={<ReturnRequestsList />}></Route>
       </Route>
-      
+
       <Route path="/" element={<ManagerDashboardSellerLaydout />} errorElement={<ErrorPage />}>
         <Route path="overview" element={<Overview />}></Route>
         <Route path="manage-product" element={<ManageProduct />}></Route>
@@ -122,7 +122,7 @@ const router = createBrowserRouter(
         <Route path="manage-return-request" element={<ManageReturnRequest />} />
       </Route>
 
-       <Route path="/admin" element={<AdminDashboardLayout />}>
+      <Route path="/admin" element={<AdminDashboardLayout />}>
         <Route path="/admin" element={<OverviewA />}></Route>
         <Route
           path="/admin/manage-products"
