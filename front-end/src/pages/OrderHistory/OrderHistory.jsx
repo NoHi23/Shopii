@@ -22,7 +22,7 @@ const OrderHistory = () => {
   const [paymentStatuses, setPaymentStatuses] = useState({});
   const [paymentMethods, setPaymentMethods] = useState({});
   const [checkingPayment, setCheckingPayment] = useState({});
-  
+
   // Track which products have been reviewed
   const [reviewedProducts, setReviewedProducts] = useState(new Set());
 
@@ -38,13 +38,13 @@ const OrderHistory = () => {
       const newPaymentStatuses = { ...paymentStatuses };
       const newPaymentMethods = { ...paymentMethods };
       const newCheckingPayment = { ...checkingPayment };
-      
+
       orders.forEach(order => {
         if (!paymentStatuses[order._id]) {
           // Mark as checking
           newCheckingPayment[order._id] = true;
           setCheckingPayment(newCheckingPayment);
-          
+
           // Check payment status
           dispatch(checkPaymentStatus(order._id))
             .then((resultAction) => {
@@ -75,12 +75,12 @@ const OrderHistory = () => {
   useEffect(() => {
     if (userReviews && userReviews.length > 0) {
       const reviewedProductIds = new Set();
-      
+
       userReviews.forEach(review => {
         // Only consider primary reviews (not replies)
         if (review.parentId === null || !review.parentId) {
           let productId = null;
-          
+
           if (review.productId?._id) {
             productId = review.productId._id;
             reviewedProductIds.add(productId);
@@ -90,7 +90,7 @@ const OrderHistory = () => {
           }
         }
       });
-      
+
       setReviewedProducts(reviewedProductIds);
       console.log('OrderHistory - Reviewed products:', [...reviewedProductIds]);
     } else {
@@ -114,16 +114,26 @@ const OrderHistory = () => {
       [orderId]: !prev[orderId]
     }));
   };
-  
+
   // Handler for proceeding to payment
   const handleProceedToPayment = (orderId) => {
+    // 1. Tìm đúng đơn hàng trong danh sách orders dựa vào orderId
+    const orderToPay = orders.find(order => order._id === orderId);
+
+    // 2. Kiểm tra xem có tìm thấy đơn hàng không (để tránh lỗi)
+    if (!orderToPay) {
+      toast.error("Không tìm thấy thông tin đơn hàng!");
+      return;
+    }
+
     toast.info("Redirecting to payment page...");
-    navigate('/payment', { 
-      state: { 
+    navigate('/payment', {
+      state: {
         orderId,
-        preferredMethod: 'PayOS',
-        directPayment: true, // This will trigger automatic payment
-        replaceExisting: true // Indicate that existing payment records should be deleted
+        totalPrice: orderToPay.totalPrice, // <-- SỬA Ở ĐÂY: Bổ sung totalPrice vào state
+        preferredMethod: 'PayPal',
+        directPayment: true,
+        replaceExisting: true
       }
     });
   };
@@ -132,19 +142,19 @@ const OrderHistory = () => {
   const shouldShowPaymentButton = (orderId) => {
     const paymentStatus = paymentStatuses[orderId];
     const paymentMethod = paymentMethods[orderId];
-    
+
     // Hide button when checking payment status
     if (checkingPayment[orderId]) return false;
-    
+
     // Don't show payment button for COD orders
     if (paymentMethod === 'COD') return false;
-    
+
     // Show payment button if there's no payment record or payment failed
     if (!paymentStatus || paymentStatus === 'failed') return true;
-    
+
     // Don't show button if payment is completed
     if (paymentStatus === 'paid') return false;
-    
+
     // For all other cases (pending, etc), show the button
     return true;
   };
@@ -242,7 +252,7 @@ const OrderHistory = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4"
@@ -253,7 +263,7 @@ const OrderHistory = () => {
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800">My Orders</h1>
         </div>
-        
+
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Search field */}
           <div className="relative">
@@ -266,7 +276,7 @@ const OrderHistory = () => {
             />
             <FaSearch className="absolute left-3.5 top-3.5 text-gray-400" />
           </div>
-          
+
           {/* Status filter */}
           <div className="relative">
             <select
@@ -288,7 +298,7 @@ const OrderHistory = () => {
       </motion.div>
 
       {loading ? (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="flex flex-col justify-center items-center py-20"
@@ -304,8 +314,8 @@ const OrderHistory = () => {
         >
           <div className="space-y-5">
             {orders.map((order, index) => (
-              <motion.div 
-                key={order._id} 
+              <motion.div
+                key={order._id}
                 className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -369,15 +379,15 @@ const OrderHistory = () => {
                         Pay Now
                       </button>
                     )}
-                    
-                    <Link 
+
+                    <Link
                       to={`/order-details/${order._id}`}
                       className="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 transition-colors px-4 py-2 rounded-lg text-sm font-medium hidden md:block"
                     >
                       View Details
                     </Link>
-                    <button 
-                      onClick={() => toggleOrderExpansion(order._id)} 
+                    <button
+                      onClick={() => toggleOrderExpansion(order._id)}
                       className={`text-gray-600 hover:text-gray-800 p-2 rounded-full hover:bg-gray-100 transition-all ${expandedOrders[order._id] ? 'bg-gray-100 rotate-180' : ''}`}
                       aria-label={expandedOrders[order._id] ? "Collapse order" : "Expand order"}
                     >
@@ -388,7 +398,7 @@ const OrderHistory = () => {
 
                 {/* Order Items (expanded) */}
                 {expandedOrders[order._id] && order.items && order.items.length > 0 && (
-                  <motion.div 
+                  <motion.div
                     className="p-5"
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
@@ -411,8 +421,8 @@ const OrderHistory = () => {
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {order.items.map((item, itemIndex) => (
-                            <motion.tr 
-                              key={item._id} 
+                            <motion.tr
+                              key={item._id}
                               className="hover:bg-gray-50 transition-colors"
                               initial={{ opacity: 0, y: 5 }}
                               animate={{ opacity: 1, y: 0 }}
@@ -422,9 +432,9 @@ const OrderHistory = () => {
                                 <div className="flex items-center">
                                   {item.productId?.image ? (
                                     <div className="flex-shrink-0 h-12 w-12 mr-3">
-                                      <img 
-                                        src={item.productId.image} 
-                                        alt={item.productId?.title} 
+                                      <img
+                                        src={item.productId.image}
+                                        alt={item.productId?.title}
                                         className="h-12 w-12 object-cover rounded-lg shadow-sm"
                                       />
                                     </div>
@@ -460,11 +470,11 @@ const OrderHistory = () => {
                                         <FaCheck className="text-xs" /> Reviewed
                                       </span>
                                     ) : (
-                                      <Link 
-                                        to={`/write-review/${item.productId._id}`} 
+                                      <Link
+                                        to={`/write-review/${item.productId._id}`}
                                         className="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 transition-colors px-3 py-1.5 rounded-lg text-sm font-medium inline-flex items-center gap-1"
                                       >
-                                        <FaStar className="text-yellow-400 text-xs" /> 
+                                        <FaStar className="text-yellow-400 text-xs" />
                                         Write Review
                                       </Link>
                                     )}
@@ -476,7 +486,7 @@ const OrderHistory = () => {
                         </tbody>
                       </table>
                     </div>
-                    
+
                     <div className="flex justify-between items-center mt-4">
                       <div>
                         {shouldShowPaymentButton(order._id) && (
@@ -489,7 +499,7 @@ const OrderHistory = () => {
                           </button>
                         )}
                       </div>
-                      <Link 
+                      <Link
                         to={`/order-details/${order._id}`}
                         className="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 transition-colors px-4 py-2 rounded-lg text-sm font-medium md:hidden flex items-center gap-2"
                       >
@@ -501,9 +511,9 @@ const OrderHistory = () => {
               </motion.div>
             ))}
           </div>
-          
+
           {pagination && pagination.pages > 1 && (
-            <Pagination 
+            <Pagination
               currentPage={currentPage}
               totalPages={pagination.pages}
               onPageChange={handlePageChange}
@@ -512,7 +522,7 @@ const OrderHistory = () => {
           )}
         </motion.div>
       ) : (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-white border rounded-xl p-12 text-center shadow-sm max-w-lg mx-auto"
