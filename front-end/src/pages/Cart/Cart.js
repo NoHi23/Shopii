@@ -3,21 +3,21 @@ import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
-import { 
+import {
   fetchCart,
   updateCartItem,
   removeCartItem,
   resetCart,
   removeSelectedItems
 } from "../../features/cart/cartSlice";
-import { 
-  Container, 
-  Typography, 
-  Box, 
-  Paper, 
-  Grid, 
-  Button, 
-  Divider, 
+import {
+  Container,
+  Typography,
+  Box,
+  Paper,
+  Grid,
+  Button,
+  Divider,
   Checkbox,
   CircularProgress,
   IconButton,
@@ -38,10 +38,10 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 const Cart = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  
+
   const { token } = useSelector((state) => state.auth) || {};
   const { items: cartItems, loading, error } = useSelector((state) => state.cart);
-  
+
   const [totalAmt, setTotalAmt] = useState(0);
   const [selectedItems, setSelectedItems] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
@@ -95,7 +95,7 @@ const Cart = () => {
       toast.warn('No items selected');
       return;
     }
-    
+
     setIsProcessing(true);
     dispatch(removeSelectedItems(selectedItems))
       .then(() => {
@@ -112,7 +112,7 @@ const Cart = () => {
   const handleUpdateQuantity = (productId, quantity) => {
     // Get the cart item
     const item = cartItems.find(item => item.productId._id === productId);
-    
+
     // Check if item exists and has inventory data
     if (item && item.productId && item.productId.inventoryQuantity !== undefined) {
       // Check if requested quantity exceeds inventory
@@ -121,7 +121,7 @@ const Cart = () => {
         return;
       }
     }
-    
+
     dispatch(updateCartItem({ productId, quantity }));
   };
 
@@ -143,13 +143,31 @@ const Cart = () => {
   };
 
   // Proceed to checkout
+  // Cart.js
   const handleProceedToCheckout = () => {
     if (selectedItems.length === 0) {
       toast.error("Please select products to checkout");
       return;
     }
-    navigate("/checkout", { state: { selectedItems } });
+
+    // build enriched array
+    const enrichedItems = cartItems
+      .filter(item => selectedItems.includes(item.productId._id))
+      .map(item => ({
+        productId: item.productId,   // giữ nguyên product object
+        quantity: item.quantity,
+        // ✅ giữ shop object từ BE nếu cartItems có sẵn
+        shop: item.shop ? item.shop : {
+          _id: item.productId?.sellerId,
+          storeName: item.productId?.storeName || "Shop",
+          fromDistrictId: item.productId?.fromDistrictId || null
+        }
+      }));
+
+    navigate("/checkout", { state: { selectedItems: enrichedItems } });
   };
+
+
 
   if (loading) {
     return (
@@ -178,11 +196,11 @@ const Cart = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <Typography 
-          variant="h4" 
-          component="h1" 
-          gutterBottom 
-          sx={{ 
+        <Typography
+          variant="h4"
+          component="h1"
+          gutterBottom
+          sx={{
             fontWeight: 700,
             color: '#0F52BA',
             position: 'relative',
@@ -203,14 +221,14 @@ const Cart = () => {
           <ShoppingCartIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
           Shopping Cart
         </Typography>
-        
+
         {cartItems.length > 0 ? (
           <Grid container spacing={4}>
             <Grid item xs={12} md={8}>
-              <Paper 
-                elevation={3} 
-                sx={{ 
-                  p: 3, 
+              <Paper
+                elevation={3}
+                sx={{
+                  p: 3,
                   borderRadius: 2,
                   mb: { xs: 3, md: 0 },
                   boxShadow: '0 10px 30px rgba(0,0,0,0.05)'
@@ -227,7 +245,7 @@ const Cart = () => {
                       Select All ({cartItems.length} items)
                     </Typography>
                   </Box>
-                  
+
                   <Button
                     variant="outlined"
                     startIcon={<DeleteSweepIcon />}
@@ -238,15 +256,15 @@ const Cart = () => {
                     Clear Cart
                   </Button>
                 </Box>
-                
+
                 <Divider sx={{ mb: 2 }} />
-                
+
                 {cartItems.map((item) => (
                   <Fade key={item.productId?._id || Math.random()} in={true}>
-                    <Card 
-                      sx={{ 
-                        mb: 2, 
-                        display: 'flex', 
+                    <Card
+                      sx={{
+                        mb: 2,
+                        display: 'flex',
                         position: 'relative',
                         borderRadius: 2,
                         overflow: 'visible',
@@ -261,11 +279,11 @@ const Cart = () => {
                           sx={{ color: '#0F52BA', '&.Mui-checked': { color: '#0F52BA' } }}
                         />
                       </Box>
-                      
-                      <Box 
-                        sx={{ 
-                          width: 100, 
-                          height: 100, 
+
+                      <Box
+                        sx={{
+                          width: 100,
+                          height: 100,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -276,38 +294,38 @@ const Cart = () => {
                           component="img"
                           image={item.productId?.image}
                           alt={item.productId?.name || "Product"}
-                          sx={{ 
+                          sx={{
                             width: '100%',
                             height: '100%',
                             objectFit: 'contain'
                           }}
                         />
                       </Box>
-                      
+
                       <CardContent sx={{ flex: '1 0 auto', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                         <Box>
                           <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
                             {item.productId?.title || item.productId?.name || "Product Name"}
                           </Typography>
-                          
+
                           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                             Unit Price: ${item.productId?.price?.toFixed(2) || "0.00"}
                           </Typography>
-                          
+
                           {item.productId.inventoryQuantity !== undefined && (
                             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                               Available: {item.productId.inventoryQuantity} in stock
                             </Typography>
                           )}
                         </Box>
-                        
+
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <IconButton 
-                              size="small" 
+                            <IconButton
+                              size="small"
                               onClick={() => item.quantity > 1 && handleUpdateQuantity(item.productId._id, item.quantity - 1)}
                               disabled={item.quantity <= 1}
-                              sx={{ 
+                              sx={{
                                 border: '1px solid #e0e0e0',
                                 borderRadius: '4px 0 0 4px',
                                 p: 0.5
@@ -315,12 +333,12 @@ const Cart = () => {
                             >
                               <RemoveIcon fontSize="small" />
                             </IconButton>
-                            
-                            <Box 
-                              sx={{ 
-                                px: 2, 
-                                py: 0.5, 
-                                minWidth: 40, 
+
+                            <Box
+                              sx={{
+                                px: 2,
+                                py: 0.5,
+                                minWidth: 40,
                                 textAlign: 'center',
                                 border: '1px solid #e0e0e0',
                                 borderLeft: 0,
@@ -329,12 +347,12 @@ const Cart = () => {
                             >
                               {item.quantity}
                             </Box>
-                            
-                            <IconButton 
-                              size="small" 
+
+                            <IconButton
+                              size="small"
                               onClick={() => handleUpdateQuantity(item.productId._id, item.quantity + 1)}
                               disabled={item.quantity >= (item.productId.inventoryQuantity || 0)}
-                              sx={{ 
+                              sx={{
                                 border: '1px solid #e0e0e0',
                                 borderRadius: '0 4px 4px 0',
                                 p: 0.5,
@@ -343,23 +361,23 @@ const Cart = () => {
                                   color: 'rgba(0, 0, 0, 0.26)'
                                 }
                               }}
-                              title={item.quantity >= (item.productId.inventoryQuantity || 0) ? 
+                              title={item.quantity >= (item.productId.inventoryQuantity || 0) ?
                                 "Maximum available quantity reached" : ""}
                             >
                               <AddIcon fontSize="small" />
                             </IconButton>
                           </Box>
-                          
+
                           <Typography variant="subtitle1" fontWeight={600} color="#0F52BA">
                             ${(item.quantity * (item.productId?.price || 0)).toFixed(2)}
                           </Typography>
                         </Box>
                       </CardContent>
-                      
-                      <IconButton 
-                        size="small" 
+
+                      <IconButton
+                        size="small"
                         onClick={() => handleRemoveItem(item.productId._id)}
-                        sx={{ 
+                        sx={{
                           position: 'absolute',
                           top: 8,
                           right: 8,
@@ -371,7 +389,7 @@ const Cart = () => {
                     </Card>
                   </Fade>
                 ))}
-                
+
                 {selectedItems.length > 0 && (
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
                     <Button
@@ -387,12 +405,12 @@ const Cart = () => {
                 )}
               </Paper>
             </Grid>
-            
+
             <Grid item xs={12} md={4}>
-              <Paper 
-                elevation={3} 
-                sx={{ 
-                  p: 3, 
+              <Paper
+                elevation={3}
+                sx={{
+                  p: 3,
                   borderRadius: 2,
                   position: 'sticky',
                   top: 24,
@@ -402,22 +420,22 @@ const Cart = () => {
                 <Typography variant="h5" fontWeight={600} mb={3}>
                   Order Summary
                 </Typography>
-                
+
                 <Divider sx={{ mb: 3 }} />
-                
+
                 <Box sx={{ mb: 3 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                     <Typography variant="body1">Selected Items:</Typography>
                     <Typography variant="body1">{selectedItems.length}</Typography>
                   </Box>
-                  
+
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                     <Typography variant="body1">Subtotal:</Typography>
                     <Typography variant="body1">${totalAmt.toFixed(2)}</Typography>
                   </Box>
-                  
+
                   <Divider sx={{ my: 2 }} />
-                  
+
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                     <Typography variant="h6" fontWeight={600}>Total:</Typography>
                     <Typography variant="h6" fontWeight={700} color="#0F52BA">
@@ -425,7 +443,7 @@ const Cart = () => {
                     </Typography>
                   </Box>
                 </Box>
-                
+
                 <Button
                   variant="contained"
                   fullWidth
@@ -433,7 +451,7 @@ const Cart = () => {
                   endIcon={<ArrowForwardIcon />}
                   onClick={handleProceedToCheckout}
                   disabled={selectedItems.length === 0}
-                  sx={{ 
+                  sx={{
                     py: 1.5,
                     backgroundColor: '#0F52BA',
                     '&:hover': {
@@ -444,12 +462,12 @@ const Cart = () => {
                 >
                   Proceed to Checkout
                 </Button>
-                
+
                 <Box sx={{ mt: 3, textAlign: 'center' }}>
                   <Link to="/" style={{ textDecoration: 'none' }}>
                     <Button
                       startIcon={<ShoppingBagIcon />}
-                      sx={{ 
+                      sx={{
                         color: '#0F52BA',
                         '&:hover': {
                           backgroundColor: 'rgba(15, 82, 186, 0.04)',
@@ -464,10 +482,10 @@ const Cart = () => {
             </Grid>
           </Grid>
         ) : (
-          <Paper 
-            elevation={3} 
-            sx={{ 
-              p: 6, 
+          <Paper
+            elevation={3}
+            sx={{
+              p: 6,
               textAlign: 'center',
               borderRadius: 2,
               boxShadow: '0 10px 30px rgba(0,0,0,0.05)'
@@ -476,28 +494,28 @@ const Cart = () => {
             <motion.div
               initial={{ scale: 0.8 }}
               animate={{ scale: 1 }}
-              transition={{ 
+              transition={{
                 type: "spring",
                 stiffness: 200,
                 damping: 15
               }}
             >
               <ShoppingCartIcon sx={{ fontSize: 80, color: '#0F52BA', opacity: 0.3, mb: 2 }} />
-              
+
               <Typography variant="h5" fontWeight={600} gutterBottom>
                 Your Cart is Empty
               </Typography>
-              
+
               <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 500, mx: 'auto' }}>
                 Your shopping cart lives to serve. Give it purpose - fill it with products, electronics, clothes, and more!
               </Typography>
-              
+
               <Button
                 variant="contained"
                 component={Link}
                 to="/"
                 startIcon={<ShoppingBagIcon />}
-                sx={{ 
+                sx={{
                   px: 4,
                   py: 1.2,
                   backgroundColor: '#0F52BA',

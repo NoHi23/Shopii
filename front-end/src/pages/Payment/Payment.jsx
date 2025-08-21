@@ -32,6 +32,7 @@ const Payment = () => {
   const locationState = location.state || {};
   const orderId = locationState.orderId ? String(locationState.orderId) : null;
   const totalPrice = locationState.totalPrice || 0;
+  console.log(totalPrice)
   const comingFromOrderPage = Boolean(locationState.directPayment);
 
   // Mặc định là PayPal nếu đến từ trang order, ngược lại là COD
@@ -70,7 +71,7 @@ const Payment = () => {
 
     // Cleanup: Reset state khi component unmount
     return () => {
-        dispatch(resetPayment());
+      dispatch(resetPayment());
     }
   }, [success, error, payment, selectedPaymentMethod, dispatch, navigate, orderId]);
 
@@ -181,10 +182,10 @@ const Payment = () => {
               </Box>
             </Paper>
             <Button
-                variant="text"
-                startIcon={<ArrowBackIcon />}
-                onClick={() => navigate(-1)} // Quay lại trang trước
-                sx={{ mt: 2, color: '#0F52BA' }}
+              variant="text"
+              startIcon={<ArrowBackIcon />}
+              onClick={() => navigate(-1)} // Quay lại trang trước
+              sx={{ mt: 2, color: '#0F52BA' }}
             >
               Quay lại
             </Button>

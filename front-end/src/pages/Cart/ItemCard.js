@@ -1,8 +1,8 @@
 import React from "react";
-import { 
-  Box, 
-  Typography, 
-  IconButton, 
+import {
+  Box,
+  Typography,
+  IconButton,
   Checkbox,
   Paper
 } from "@mui/material";
@@ -11,12 +11,12 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import { motion } from "framer-motion";
 
-const ItemCard = ({ 
-  item, 
-  isSelected, 
-  onSelect, 
-  onUpdateQuantity, 
-  onRemoveItem 
+const ItemCard = ({
+  item,
+  isSelected,
+  onSelect,
+  onUpdateQuantity,
+  onRemoveItem
 }) => {
   if (!item) return null;
 
@@ -67,12 +67,12 @@ const ItemCard = ({
               sx={{ color: '#0F52BA', '&.Mui-checked': { color: '#0F52BA' } }}
             />
           </Box>
-          
+
           {/* Product Image */}
-          <Box 
-            sx={{ 
-              width: 80, 
-              height: 80, 
+          <Box
+            sx={{
+              width: 80,
+              height: 80,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -82,17 +82,17 @@ const ItemCard = ({
               overflow: 'hidden'
             }}
           >
-            <img 
-              src={item.image} 
-              alt={item.name || "Product"} 
-              style={{ 
+            <img
+              src={item.image}
+              alt={item.name || "Product"}
+              style={{
                 maxWidth: '100%',
                 maxHeight: '100%',
                 objectFit: 'contain'
               }}
             />
           </Box>
-          
+
           {/* Product Details */}
           <Box sx={{ flex: 1 }}>
             <Typography variant="subtitle1" fontWeight={600}>
@@ -107,14 +107,14 @@ const ItemCard = ({
               </Typography>
             )}
           </Box>
-          
+
           {/* Quantity Controls */}
           <Box sx={{ display: 'flex', alignItems: 'center', mr: 3 }}>
-            <IconButton 
-              size="small" 
+            <IconButton
+              size="small"
               onClick={handleDecrease}
               disabled={item.quantity <= 1}
-              sx={{ 
+              sx={{
                 border: '1px solid #e0e0e0',
                 borderRadius: '4px 0 0 4px',
                 p: 0.5
@@ -122,12 +122,12 @@ const ItemCard = ({
             >
               <RemoveIcon fontSize="small" />
             </IconButton>
-            
-            <Box 
-              sx={{ 
-                px: 2, 
-                py: 0.5, 
-                minWidth: 40, 
+
+            <Box
+              sx={{
+                px: 2,
+                py: 0.5,
+                minWidth: 40,
                 textAlign: 'center',
                 border: '1px solid #e0e0e0',
                 borderLeft: 0,
@@ -136,12 +136,12 @@ const ItemCard = ({
             >
               {item.quantity}
             </Box>
-            
-            <IconButton 
-              size="small" 
+
+            <IconButton
+              size="small"
               onClick={handleIncrease}
               disabled={isIncreaseDisabled}
-              sx={{ 
+              sx={{
                 border: '1px solid #e0e0e0',
                 borderRadius: '0 4px 4px 0',
                 p: 0.5
@@ -150,17 +150,17 @@ const ItemCard = ({
               <AddIcon fontSize="small" />
             </IconButton>
           </Box>
-          
+
           {/* Subtotal */}
           <Box sx={{ minWidth: 80, textAlign: 'right', mr: 2 }}>
             <Typography variant="subtitle1" fontWeight={700} color="#0F52BA">
               ${(item.quantity * (item.price || 0)).toFixed(2)}
             </Typography>
           </Box>
-          
+
           {/* Remove Button */}
-          <IconButton 
-            onClick={() => onRemoveItem(item._id)} 
+          <IconButton
+            onClick={() => onRemoveItem(item._id)}
             size="small"
             sx={{ color: '#d32f2f' }}
           >

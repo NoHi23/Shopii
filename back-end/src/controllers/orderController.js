@@ -8,46 +8,51 @@ const Product = require('../models/Product');
 const User = require('../models/User'); // Add this import to fetch user details
 const { sendEmail } = require('../services/emailService'); // Add this import assuming emailService.js is in services folder
 
+const GHNService = require('../services/ghnService');
+const Store = require('../models/Store');
+const Address = require('../models/Address');
+const { getStoreFromDistrict } = require('../services/storeService');
+
 // Utility function to sync order status based on its items
 const syncOrderStatus = async (orderId) => {
   try {
     console.log(`Syncing status for order ${orderId}...`);
-    
+
     // Get all order items for this order
     const orderItems = await OrderItem.find({ orderId });
-    
+
     // If no items found, return early
     if (!orderItems || orderItems.length === 0) {
       console.log(`No order items found for order ${orderId}`);
       return;
     }
-    
+
     console.log(`Found ${orderItems.length} items for order ${orderId}`);
-    
+
     // Check each item's status
     const itemStatuses = orderItems.map(item => ({
       id: item._id,
       status: item.status
     }));
     console.log('Item statuses:', JSON.stringify(itemStatuses));
-    
+
     // Check if all items have status 'shipped'
     const allItemsShipped = orderItems.every(item => item.status === 'shipped');
     console.log(`All items shipped: ${allItemsShipped}`);
-    
+
     // If all items are shipped, update the order status
     if (allItemsShipped) {
       console.log(`Updating order ${orderId} status to 'shipped'`);
-      
+
       // Get current order status
       const order = await Order.findById(orderId);
       console.log(`Current order status: ${order?.status}`);
-      
+
       // Only update if status isn't already 'shipped'
       if (order && order.status !== 'shipped') {
         const updatedOrder = await Order.findByIdAndUpdate(
-          orderId, 
-          { status: 'shipped' }, 
+          orderId,
+          { status: 'shipped' },
           { new: true }
         );
         console.log(`Order status updated successfully: ${updatedOrder.status}`);
@@ -67,47 +72,39 @@ const syncOrderStatus = async (orderId) => {
 };
 
 const createOrder = async (req, res) => {
-  const { selectedItems, selectedAddressId, couponCode } = req.body; // paymentMethod removed as it's handled separately
-  const buyerId = req.user.id; // Assumed from auth middleware (e.g., authMiddleware1 sets req.user)
+  const { selectedItems, selectedAddressId, couponCode } = req.body;
+  const buyerId = req.user.id;
 
   if (!selectedAddressId || !selectedItems || selectedItems.length === 0) {
     return res.status(400).json({ error: 'Missing required fields: address or items' });
   }
 
   try {
-    // Fetch buyer details for email
+    // Fetch buyer details
     const buyer = await User.findById(buyerId);
     if (!buyer || !buyer.email) {
       return res.status(400).json({ error: 'Buyer email not found' });
     }
     const buyerEmail = buyer.email;
 
-    // Step 1: Calculate subtotal and validate inventory/products
+    // Step 1: Calculate subtotal & validate inventory
     let subtotal = 0;
     const productDetails = {};
 
     for (const item of selectedItems) {
-      // Validate product exists
       const product = await Product.findById(item.productId);
       if (!product) {
         return res.status(404).json({ error: `Product ${item.productId} not found` });
       }
 
-      // Find or create inventory record
       let inventory = await Inventory.findOne({ productId: item.productId });
-      
-      // If inventory doesn't exist, create it with 0 quantity
       if (!inventory) {
-        inventory = new Inventory({
-          productId: item.productId,
-          quantity: 0
-        });
+        inventory = new Inventory({ productId: item.productId, quantity: 0 });
         await inventory.save();
       }
-      
-      // Validate inventory quantity
+
       if (inventory.quantity < item.quantity) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: `Insufficient inventory for product ${product.title} (ID: ${item.productId}). Available: ${inventory.quantity}, Requested: ${item.quantity}`
         });
       }
@@ -124,7 +121,6 @@ const createOrder = async (req, res) => {
       if (!voucher || !voucher.isActive) {
         return res.status(400).json({ error: 'Invalid or inactive voucher' });
       }
-
       if (subtotal < voucher.minOrderValue) {
         return res.status(400).json({ error: `Order must be at least ${voucher.minOrderValue} to apply this voucher` });
       }
@@ -136,65 +132,86 @@ const createOrder = async (req, res) => {
         discount = voucher.maxDiscount > 0 ? Math.min(calculatedDiscount, voucher.maxDiscount) : calculatedDiscount;
       }
 
-      // Increment usedCount and save (triggers pre-save hook to update isActive if needed)
       voucher.usedCount += 1;
       await voucher.save();
     }
 
-    const totalPrice = Math.max(subtotal - discount, 0);
+    // Step 3: Calculate shipping fee
+    const address = await Address.findById(selectedAddressId);
+    if (!address || !address.locationGHN) {
+      return res.status(400).json({ error: 'Invalid shipping address' });
+    }
 
-    // Step 3: Create the Order
+    let shippingFee = 0;
+    const ghn = new GHNService(process.env.GHN_TOKEN, process.env.GHN_SHOP_ID);
+
+    for (const item of selectedItems) {
+      const product = await Product.findById(item.productId);
+      const fromDistrictId = await getStoreFromDistrict(product);
+
+      if (fromDistrictId) {
+        const feeRes = await ghn.calculateShippingFee({
+          from_district_id: fromDistrictId,
+          to_district_id: address.locationGHN.district_id,
+          to_ward_code: address.locationGHN.ward_code,
+          service_type_id: 2,
+          weight: 1000, // giữ nguyên như FE
+          insurance_value: 500000,
+        });
+
+        shippingFee += feeRes?.data?.total || 0;
+      }
+    }
+
+    // Step 4: Calculate total
+    const totalPrice = Math.max(subtotal - discount, 0) + shippingFee;
+
+    // Step 5: Create Order
     const order = new Order({
       buyerId,
       addressId: selectedAddressId,
+      subtotal,
+      discount,
+      shippingFee,
       totalPrice,
-      status: 'pending', // Default status
+      status: 'pending',
     });
     await order.save();
 
-    // Step 4: Create OrderItems and deduct from inventory
+    // Step 6: Create OrderItems & update inventory
     for (const item of selectedItems) {
       const orderItem = new OrderItem({
         orderId: order._id,
         productId: item.productId,
         quantity: item.quantity,
         unitPrice: productDetails[item.productId].unitPrice,
-        status: 'pending', // Default status
+        status: 'pending',
       });
       await orderItem.save();
 
-      // Deduct quantity from inventory - using upsert:false since we know inventory exists
       await Inventory.findOneAndUpdate(
         { productId: item.productId },
-        { 
-          $inc: { quantity: -item.quantity },
-          $set: { lastUpdated: new Date() }
-        },
-        { upsert: false } // No upsert, assume inventory exists (we created it if needed above)
+        { $inc: { quantity: -item.quantity }, $set: { lastUpdated: new Date() } },
+        { upsert: false }
       );
     }
-    
-    // Check if we need to update the order status based on all items
-    await syncOrderStatus(order._id);
 
-    // Step 5: Send email notification assuming payment is successful (e.g., for COD or post-order confirmation)
-    // Note: If payment is handled separately (e.g., via gateway webhook), move this to a payment success handler.
-    // For now, assuming order creation implies payment success for simplicity.
+    // Step 7: Gửi email thông báo
     try {
       const emailSubject = 'Payment Successful and Order Confirmation';
-      const emailText = `Dear Customer,\n\nYour payment was successful, and your order has been placed.\nOrder ID: ${order._id}\nTotal Amount: ${totalPrice}\n\nThank you for shopping with us!`;
+      const emailText = `Dear Customer,\n\nYour order has been placed successfully.\nOrder ID: ${order._id}\nTotal Amount: ${totalPrice}\nShipping Fee: ${shippingFee}\n\nThank you for shopping with us!`;
       await sendEmail(buyerEmail, emailSubject, emailText);
-      console.log('Email sent successfully to:', buyerEmail);
     } catch (emailError) {
       console.error('Failed to send order confirmation email:', emailError);
-      // Continue with order creation even if email fails
     }
 
-    // Success response
-    return res.status(201).json({ 
+    return res.status(201).json({
       message: 'Order placed successfully',
       orderId: order._id,
-      totalPrice 
+      subtotal,
+      discount,
+      shippingFee,
+      totalPrice,
     });
 
   } catch (error) {
@@ -231,16 +248,16 @@ const getBuyerOrders = async (req, res) => {
 
     // Before returning results, check and update each order's status
     console.log(`Checking status for ${orders.length} orders`);
-    
+
     // For each order, check if status needs updating and fetch items
     const ordersWithItems = await Promise.all(
       orders.map(async (order) => {
         // Check and update order status
         await syncOrderStatus(order._id);
-        
+
         // Get the order with potentially updated status
         const updatedOrder = await Order.findById(order._id).lean();
-        
+
         // Get order items with product details
         const items = await OrderItem.find({ orderId: order._id })
           .populate({
@@ -248,7 +265,7 @@ const getBuyerOrders = async (req, res) => {
             select: 'title image price description'
           })
           .lean();
-          
+
         return { ...updatedOrder, items };
       })
     );
@@ -312,43 +329,43 @@ const updateOrderItemStatus = async (req, res) => {
   try {
     const { id } = req.params; // Order item ID
     const { status } = req.body;
-    
+
     console.log(`Updating order item ${id} status to ${status}`);
-    
+
     // Validate status
     if (!status || !['pending', 'shipping', 'shipped', 'failed to ship', 'rejected'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
     }
-    
+
     // Find the order item first to get orderId
     const orderItem = await OrderItem.findById(id);
     if (!orderItem) {
       return res.status(404).json({ error: 'Order item not found' });
     }
-    
+
     // Store orderId for later use
     const orderId = orderItem.orderId;
     console.log(`Order item belongs to order ${orderId}`);
-    
+
     // Update the order item
     const updatedOrderItem = await OrderItem.findByIdAndUpdate(
       id,
       { status },
       { new: true } // Return the updated document
     ).populate('productId', 'title');
-    
+
     console.log(`Successfully updated status of order item for ${updatedOrderItem.productId?.title || 'unknown product'}`);
-    
+
     // If status is 'shipped', check if all items in the order are shipped
     if (status === 'shipped') {
       console.log('Checking if all items in the order are now shipped');
       const orderStatusUpdated = await syncOrderStatus(orderId);
       console.log(`Order status was ${orderStatusUpdated ? 'updated' : 'not updated'}`);
     }
-    
-    return res.status(200).json({ 
-      message: 'Order item status updated successfully', 
-      orderItem: updatedOrderItem 
+
+    return res.status(200).json({
+      message: 'Order item status updated successfully',
+      orderItem: updatedOrderItem
     });
   } catch (error) {
     console.error('Error updating order item status:', error);

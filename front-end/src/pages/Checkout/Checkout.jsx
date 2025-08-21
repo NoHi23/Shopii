@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -8,18 +8,18 @@ import { applyVoucher, clearVoucher } from "../../features/voucher/voucherSlice"
 import { createOrder } from "../../features/order/orderSlice";
 import { removeSelectedItems } from "../../features/cart/cartSlice";
 import { motion } from "framer-motion";
-import { 
-  Container, 
-  Typography, 
-  Box, 
-  Paper, 
-  Grid, 
-  Radio, 
-  RadioGroup, 
-  FormControlLabel, 
-  Button, 
-  TextField, 
-  Divider, 
+import {
+  Container,
+  Typography,
+  Box,
+  Paper,
+  Grid,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  Button,
+  TextField,
+  Divider,
   Chip,
   CircularProgress,
   FormControl,
@@ -29,7 +29,6 @@ import {
   InputLabel
 } from "@mui/material";
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import PaymentIcon from '@mui/icons-material/Payment';
 import DiscountIcon from '@mui/icons-material/Discount';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import AddIcon from '@mui/icons-material/Add';
@@ -74,10 +73,8 @@ const Checkout = () => {
   const { voucher, loading: voucherLoading, error: voucherError } = useSelector((state) => state.voucher);
 
   // State for selected products
-  const selectedItems = location.state?.selectedItems || [];
-  const selectedProducts = cartItems.filter(item =>
-    item.productId && selectedItems.includes(item.productId._id)
-  );
+  const selectedProducts = location.state?.selectedItems || [];
+
 
   // State for checkout options
   const [couponCode, setCouponCode] = useState("");
@@ -100,7 +97,7 @@ const Checkout = () => {
   });
   const [phoneError, setPhoneError] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  
+
   // Thêm các state cho dropdown GHN
   const [provinces, setProvinces] = useState([]);
   const [districts, setDistricts] = useState([]);
@@ -108,6 +105,84 @@ const Checkout = () => {
   const [selectedProvince, setSelectedProvince] = useState(null);
   const [selectedDistrict, setSelectedDistrict] = useState(null);
   const [selectedWard, setSelectedWard] = useState(null);
+  const [groupedByShop, setGroupedByShop] = useState({});
+
+  // Group products theo shop mỗi khi selectedProducts thay đổi
+  useEffect(() => {
+    const grouped = selectedProducts.reduce((acc, item) => {
+      const shopObj = item.shop;   // đã truyền từ Cart
+      const shopId = shopObj?._id || item.productId?.sellerId || "unknown";
+
+      if (!acc[shopId]) {
+        acc[shopId] = {
+          shop: shopObj,
+          items: [],
+          subtotal: 0,
+          shippingFee: 0,
+        };
+      }
+
+      acc[shopId].items.push(item);
+      acc[shopId].subtotal += (item.productId?.price || 0) * item.quantity;
+      return acc;
+    }, {});
+    setGroupedByShop(grouped);
+  }, [selectedProducts]);
+
+
+  // API tính phí ship
+  const fetchShippingFee = async (shopGroup, address) => {
+    try {
+      if (!shopGroup?.shop?.fromDistrictId ||
+        !address?.locationGHN?.district_id ||
+        !address?.locationGHN?.ward_code) {
+        console.warn("Thiếu thông tin địa chỉ để tính phí ship:", {
+          from: shopGroup?.shop?.fromDistrictId,   // ✅ sửa ở đây
+          to: address?.locationGHN?.district_id,
+          ward: address?.locationGHN?.ward_code,
+        });
+        return 0;
+      }
+
+      const res = await fetch("http://localhost:9999/api/ghn/calc-fee-simple", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_district_id: shopGroup.shop.fromDistrictId,  // ✅ dùng đúng key
+          to_district_id: address.locationGHN.district_id,
+          to_ward_code: address.locationGHN.ward_code,
+          weight: shopGroup.items.reduce((sum, i) => sum + i.quantity * 500, 0)
+        })
+      });
+
+      const data = await res.json();
+      return data?.data?.total || 0;
+    } catch (err) {
+      console.error("Ship fee error:", err);
+      return 0;
+    }
+  };
+
+
+  // Cập nhật phí ship khi địa chỉ chọn thay đổi
+  useEffect(() => {
+    const updateFees = async () => {
+      if (!selectedAddressId) return;
+      const address = addresses.find(a => a._id === selectedAddressId);
+      if (!address) return;
+
+      const updated = { ...groupedByShop };
+      for (const shopId of Object.keys(updated)) {
+        const fee = await fetchShippingFee(updated[shopId], address);
+        updated[shopId].shippingFee = fee;
+      }
+      setGroupedByShop(updated);
+    };
+
+    if (Object.keys(groupedByShop).length > 0) {
+      updateFees();
+    }
+  }, [groupedByShop, selectedAddressId]);
 
   // Fetch addresses on component mount and clear voucher on unmount
   useEffect(() => {
@@ -220,7 +295,15 @@ const Checkout = () => {
   };
 
   const discount = calculateDiscount();
-  const total = Math.max(subtotal - discount, 0);
+
+  // ✅ grandTotal tính bằng useMemo từ groupedByShop + discount
+  const grandTotal = useMemo(() => {
+    let total = 0;
+    Object.values(groupedByShop).forEach(g => {
+      total += g.subtotal + g.shippingFee;
+    });
+    return Math.max(total - discount, 0);
+  }, [groupedByShop, discount]);
 
   // Handle adding a new address
   const handleAddAddress = () => {
@@ -258,37 +341,37 @@ const Checkout = () => {
       toast.error("Please select a shipping address");
       return;
     }
-    
+
     setIsProcessing(true);
-    
-    const orderDetails = { 
+
+    const orderDetails = {
       selectedItems: selectedProducts.map(item => ({
         productId: item.productId._id,
         quantity: item.quantity
-      })), 
-      selectedAddressId, 
+      })),
+      selectedAddressId,
       couponCode: voucher ? voucher.code : ''
     };
 
     try {
       console.log("Submitting order with items:", orderDetails.selectedItems);
       const result = await dispatch(createOrder(orderDetails)).unwrap();
-      
+
       // Get all product IDs to remove from cart
       const productIds = selectedProducts.map(item => item.productId._id);
-      
+
       // Remove the items from cart in a single batch operation
       await dispatch(removeSelectedItems(productIds)).unwrap();
-      
+
       toast.success("Order placed successfully!");
-      
-      // Navigate to payment page with stringified orderId to ensure it passes correctly
-      navigate("/payment", { 
-        state: { 
-          orderId: result.orderId.toString(), 
-          totalPrice: result.totalPrice
+
+      // Navigate to payment page with stringified orderId
+      navigate("/payment", {
+        state: {
+          orderId: result.orderId.toString(),
+          totalPrice: grandTotal
         },
-        replace: true  // Use replace to prevent back navigation issues
+        replace: true
       });
     } catch (error) {
       toast.error(error);
@@ -339,8 +422,6 @@ const Checkout = () => {
       ward: wardObj ? wardObj.WardName : "",
       ward_code: wardObj ? wardObj.WardCode : null,
     });
-    console.log("ward:đây ", wardObj ? wardObj.WardName : "");
-    console.log("address final:", newAddress);
   };
 
   return (
@@ -350,11 +431,11 @@ const Checkout = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <Typography 
-          variant="h4" 
-          component="h1" 
-          gutterBottom 
-          sx={{ 
+        <Typography
+          variant="h4"
+          component="h1"
+          gutterBottom
+          sx={{
             fontWeight: 700,
             color: '#0F52BA',
             position: 'relative',
@@ -375,15 +456,15 @@ const Checkout = () => {
           <ShoppingCartIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
           Checkout
         </Typography>
-        
+
         <Grid container spacing={4}>
           {/* Left side: Shipping and coupon */}
           <Grid item xs={12} md={7}>
-            <Paper 
-              elevation={3} 
-              sx={{ 
-                p: 4, 
-                mb: 4, 
+            <Paper
+              elevation={3}
+              sx={{
+                p: 4,
+                mb: 4,
                 borderRadius: 2,
                 boxShadow: '0 10px 30px rgba(0,0,0,0.05)'
               }}
@@ -394,9 +475,9 @@ const Checkout = () => {
                   Shipping Address
                 </Typography>
               </Box>
-              
+
               <Divider sx={{ mb: 3 }} />
-              
+
               {addresses.length > 0 ? (
                 <RadioGroup
                   value={selectedAddressId}
@@ -405,10 +486,10 @@ const Checkout = () => {
                   <Grid container spacing={2}>
                     {addresses.map((address) => (
                       <Grid item xs={12} sm={6} key={address._id}>
-                        <Paper 
-                          variant="outlined" 
-                          sx={{ 
-                            p: 2, 
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            p: 2,
                             borderRadius: 2,
                             borderColor: selectedAddressId === address._id ? '#0F52BA' : 'divider',
                             backgroundColor: selectedAddressId === address._id ? 'rgba(15, 82, 186, 0.04)' : 'transparent',
@@ -417,16 +498,16 @@ const Checkout = () => {
                           }}
                         >
                           {address.isDefault && (
-                            <Chip 
-                              label="Default" 
-                              size="small" 
-                              color="primary" 
-                              sx={{ 
-                                position: 'absolute', 
-                                top: 8, 
+                            <Chip
+                              label="Default"
+                              size="small"
+                              color="primary"
+                              sx={{
+                                position: 'absolute',
+                                top: 8,
                                 right: 8,
                                 backgroundColor: '#0F52BA'
-                              }} 
+                              }}
                             />
                           )}
                           <FormControlLabel
@@ -457,12 +538,12 @@ const Checkout = () => {
                   You don't have any addresses yet. Please add a new address.
                 </Typography>
               )}
-              
+
               <Button
                 variant="outlined"
                 startIcon={<AddIcon />}
                 onClick={() => setIsAddressModalOpen(true)}
-                sx={{ 
+                sx={{
                   mt: 3,
                   borderColor: '#0F52BA',
                   color: '#0F52BA',
@@ -475,11 +556,11 @@ const Checkout = () => {
                 Add New Address
               </Button>
             </Paper>
-            
-            <Paper 
-              elevation={3} 
-              sx={{ 
-                p: 4, 
+
+            <Paper
+              elevation={3}
+              sx={{
+                p: 4,
                 borderRadius: 2,
                 boxShadow: '0 10px 30px rgba(0,0,0,0.05)'
               }}
@@ -490,9 +571,9 @@ const Checkout = () => {
                   Discount Code
                 </Typography>
               </Box>
-              
+
               <Divider sx={{ mb: 3 }} />
-              
+
               {voucher ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -501,7 +582,7 @@ const Checkout = () => {
                       Applied: {voucher.code}
                     </Typography>
                   </Box>
-                  <Button 
+                  <Button
                     variant="outlined"
                     color="error"
                     size="small"
@@ -522,11 +603,11 @@ const Checkout = () => {
                     size="small"
                     sx={{ mr: 2 }}
                   />
-                  <Button 
+                  <Button
                     variant="contained"
                     onClick={handleApplyCoupon}
                     disabled={voucherLoading || !couponCode.trim()}
-                    sx={{ 
+                    sx={{
                       minWidth: 100,
                       backgroundColor: '#0F52BA',
                       '&:hover': {
@@ -538,23 +619,23 @@ const Checkout = () => {
                   </Button>
                 </Box>
               )}
-              
+
               {voucherError && !voucher && (
                 <Typography variant="body2" color="error" sx={{ mt: 1 }}>
                   {voucherError}
                 </Typography>
               )}
             </Paper>
-            
+
             {/* Removed Payment Method section */}
           </Grid>
-          
+
           {/* Right side: Order summary */}
           <Grid item xs={12} md={5}>
-            <Paper 
-              elevation={3} 
-              sx={{ 
-                p: 4, 
+            <Paper
+              elevation={3}
+              sx={{
+                p: 4,
                 borderRadius: 2,
                 position: 'sticky',
                 top: 24,
@@ -564,89 +645,64 @@ const Checkout = () => {
               <Typography variant="h5" fontWeight={600} mb={3}>
                 Order Summary
               </Typography>
-              
               <Divider sx={{ mb: 3 }} />
-              
-              <Box sx={{ maxHeight: 300, overflowY: 'auto', mb: 3, pr: 1 }}>
-                {selectedProducts.map(item => (
-                  <Box 
-                    key={item.productId?._id} 
-                    sx={{ 
-                      display: 'flex', 
-                      mb: 2, 
-                      pb: 2, 
-                      borderBottom: '1px solid #eee' 
-                    }}
-                  >
-                    <Box 
-                      sx={{ 
-                        width: 70, 
-                        height: 70, 
-                        flexShrink: 0, 
-                        backgroundColor: '#f5f5f5',
-                        borderRadius: 1,
-                        overflow: 'hidden',
-                        mr: 2,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      <img 
-                        src={item.productId?.image} 
-                        alt={item.productId?.title} 
-                        style={{ 
-                          maxWidth: '100%', 
-                          maxHeight: '100%', 
-                          objectFit: 'contain' 
-                        }}
-                      />
-                    </Box>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="body1" fontWeight={500} noWrap>
-                        {item.productId?.title || item.productId?.name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Quantity: {item.quantity}
-                      </Typography>
-                    </Box>
-                    <Typography variant="body1" fontWeight={600} sx={{ ml: 2 }}>
-                      ${((item.productId?.price || 0) * item.quantity).toFixed(2)}
+
+              {/* Theo từng shop */}
+              {Object.entries(groupedByShop).map(([shopId, shopGroup]) => (
+                <Box key={shopId} sx={{ mb: 3, p: 2, border: "1px solid #eee", borderRadius: 2 }}>
+                  <Typography variant="subtitle1" fontWeight={600} color="#0F52BA">
+                    {shopGroup.shop?.storeName || "Shop"}
+                  </Typography>
+
+                  <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
+                    <Typography variant="body2">Subtotal:</Typography>
+                    <Typography variant="body2">₫{shopGroup.subtotal.toLocaleString()}</Typography>
+                  </Box>
+
+                  <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
+                    <Typography variant="body2">Shipping Fee:</Typography>
+                    <Typography variant="body2">₫{shopGroup.shippingFee.toLocaleString()}</Typography>
+                  </Box>
+
+                  <Divider sx={{ my: 1 }} />
+
+                  <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                    <Typography variant="body1" fontWeight={600}>Shop Total:</Typography>
+                    <Typography variant="body1" fontWeight={700} color="#0F52BA">
+                      ₫{(shopGroup.subtotal + shopGroup.shippingFee).toLocaleString()}
                     </Typography>
                   </Box>
-                ))}
-              </Box>
-              
-              <Box sx={{ mb: 3 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography variant="body1">Subtotal:</Typography>
-                  <Typography variant="body1">₫{subtotal.toLocaleString()}</Typography>
                 </Box>
-                
-                {discount > 0 && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, color: 'success.main' }}>
-                    <Typography variant="body1">Discount:</Typography>
-                    <Typography variant="body1">-₫{discount.toLocaleString()}</Typography>
-                  </Box>
-                )}
-                
-                <Divider sx={{ my: 2 }} />
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography variant="h6" fontWeight={600}>Total:</Typography>
-                  <Typography variant="h6" fontWeight={700} color="#0F52BA">
-                    ₫{total.toLocaleString()}
+              ))}
+
+              <Divider sx={{ my: 2 }} />
+
+              {/* Discount */}
+              {discount > 0 && (
+                <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2, color: "success.main" }}>
+                  <Typography variant="h6" fontWeight={600}>Discount:</Typography>
+                  <Typography variant="h6" fontWeight={700}>
+                    -₫{discount.toLocaleString()}
                   </Typography>
                 </Box>
+              )}
+
+              {/* Grand Total */}
+              <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
+                <Typography variant="h6" fontWeight={600}>Grand Total:</Typography>
+                <Typography variant="h6" fontWeight={700} color="#0F52BA">
+                  ₫{grandTotal.toLocaleString()}
+                </Typography>
               </Box>
-              
+
+
               <Button
                 variant="contained"
                 fullWidth
                 size="large"
                 onClick={handlePlaceOrder}
                 disabled={isProcessing || selectedProducts.length === 0}
-                sx={{ 
+                sx={{
                   py: 1.5,
                   backgroundColor: '#0F52BA',
                   '&:hover': {
@@ -664,16 +720,16 @@ const Checkout = () => {
                   'Place Order'
                 )}
               </Button>
-              
-              <Box sx={{ 
-                mt: 3, 
-                p: 2, 
-                backgroundColor: 'rgba(15, 82, 186, 0.04)', 
+
+              <Box sx={{
+                mt: 3,
+                p: 2,
+                backgroundColor: 'rgba(15, 82, 186, 0.04)',
                 borderRadius: 2,
                 border: '1px dashed #0F52BA'
               }}>
                 <Typography variant="body2" color="text.secondary">
-                  By placing your order, you agree to our terms and conditions. 
+                  By placing your order, you agree to our terms and conditions.
                   For Cash on Delivery orders, please have the exact amount ready at the time of delivery.
                 </Typography>
               </Box>
@@ -681,7 +737,7 @@ const Checkout = () => {
           </Grid>
         </Grid>
       </motion.div>
-      
+
       {/* Add new address modal */}
       <Modal
         isOpen={isAddressModalOpen}
@@ -694,13 +750,13 @@ const Checkout = () => {
           <Typography variant="h5" fontWeight={600} mb={3}>
             Add New Address
           </Typography>
-          
+
           {phoneError && (
             <Typography variant="body2" color="error" sx={{ mb: 2 }}>
               {phoneError}
             </Typography>
           )}
-          
+
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
               <TextField
@@ -805,7 +861,7 @@ const Checkout = () => {
             <Grid item xs={12}>
               <FormControlLabel
                 control={
-                  <Checkbox 
+                  <Checkbox
                     checked={newAddress.isDefault}
                     onChange={(e) => setNewAddress({ ...newAddress, isDefault: e.target.checked })}
                     sx={{ color: '#0F52BA', '&.Mui-checked': { color: '#0F52BA' } }}
@@ -815,15 +871,15 @@ const Checkout = () => {
               />
             </Grid>
           </Grid>
-          
+
           {/* Thêm dropdown chọn tỉnh, quận/huyện, phường/xã */}
-         
-          
+
+
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3, gap: 2 }}>
             <Button
               variant="outlined"
               onClick={() => setIsAddressModalOpen(false)}
-              sx={{ 
+              sx={{
                 borderColor: 'grey.500',
                 color: 'grey.700',
                 '&:hover': {
@@ -837,7 +893,7 @@ const Checkout = () => {
             <Button
               variant="contained"
               onClick={handleAddAddress}
-              sx={{ 
+              sx={{
                 backgroundColor: '#0F52BA',
                 '&:hover': {
                   backgroundColor: '#0A3C8A',

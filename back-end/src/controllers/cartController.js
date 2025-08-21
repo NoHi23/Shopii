@@ -1,5 +1,8 @@
 const Cart = require('../models/Cart');
+const Store = require("../models/Store");
+const Address = require("../models/Address");
 const Product = require('../models/Product');
+const { getStoreFromDistrict } = require("../services/storeService");
 
 // Thêm sản phẩm vào giỏ hàng
 const addToCart = async (req, res) => {
@@ -20,9 +23,9 @@ const addToCart = async (req, res) => {
 
     // Check if the user is a seller trying to add their own product
     if (req.user.role === 'seller' && product.sellerId.toString() === userId) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         success: false,
-        message: 'Sellers cannot add their own products to cart' 
+        message: 'Sellers cannot add their own products to cart'
       });
     }
 
@@ -59,15 +62,49 @@ const addToCart = async (req, res) => {
 const viewCart = async (req, res) => {
   try {
     const userId = req.user.id;
+
     // Tìm giỏ hàng và populate thông tin sản phẩm
-    const cart = await Cart.findOne({ userId }).populate('items.productId');
+    const cart = await Cart.findOne({ userId }).populate("items.productId");
     if (!cart) {
-      return res.status(404).json({ message: 'Cart not found' });
+      return res.status(404).json({ message: "Cart not found" });
     }
-    res.status(200).json(cart);
+
+    const groupedByShop = {};
+
+    for (const item of cart.items) {
+      if (!item.productId) continue;
+
+      // Lấy thông tin store từ sellerId của product
+      const store = await Store.findOne({ sellerId: item.productId.sellerId });
+      if (!store) continue;
+
+      // Lấy district_id của địa chỉ mặc định shop
+      const fromDistrictId = await getStoreFromDistrict(store);
+
+      if (!groupedByShop[store._id]) {
+        groupedByShop[store._id] = {
+          shop: {
+            ...store.toObject(),
+            fromDistrictId: fromDistrictId, // ✅ gắn thêm để FE dùng tính phí ship
+          },
+          items: [],
+          subtotal: 0,
+        };
+      }
+
+      groupedByShop[store._id].items.push(item);
+      groupedByShop[store._id].subtotal +=
+        (item.productId.price || 0) * item.quantity;
+    }
+
+    // Trả về cart + dữ liệu nhóm theo shop
+    res.status(200).json({
+      ...cart.toObject(),
+      groupedByShop,
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Error in viewCart:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -155,9 +192,9 @@ const removeMultipleItems = async (req, res) => {
 
     // Return the updated cart
     const updatedCart = await Cart.findOne({ userId }).populate('items.productId');
-    res.status(200).json({ 
-      message: `${result.modifiedCount > 0 ? 'Items removed from cart' : 'No items were removed'}`, 
-      cart: updatedCart 
+    res.status(200).json({
+      message: `${result.modifiedCount > 0 ? 'Items removed from cart' : 'No items were removed'}`,
+      cart: updatedCart
     });
   } catch (error) {
     console.error('Error removing multiple items from cart:', error);
@@ -165,11 +202,13 @@ const removeMultipleItems = async (req, res) => {
   }
 };
 
+
+
 // Xuất các hàm
 module.exports = {
   addToCart,
   viewCart,
   updateCartItem,
   deleteCartItem,
-  removeMultipleItems
+  removeMultipleItems,
 };

@@ -15,31 +15,47 @@ export const fetchCart = createAsyncThunk(
       const response = await axios.get(`${API_URL}/buyers/cart`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      
-      const cartItems = response.data.items;
-      
-      // Fetch inventory data for each product in the cart
+
+      const { items: cartItems, groupedByShop } = response.data;
+
+      // Fetch inventory data cho từng product và gắn shop từ groupedByShop
       const itemsWithInventory = await Promise.all(
         cartItems.map(async (item) => {
           try {
-            const inventoryResponse = await axios.get(`${API_URL}/products/${item.productId._id}/detail`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            
-            // Add inventory quantity to productId object
-            item.productId.inventoryQuantity = inventoryResponse.data.data.inventory?.quantity || 0;
+            const inventoryResponse = await axios.get(
+              `${API_URL}/products/${item.productId._id}/detail`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            // Add inventory quantity
+            item.productId.inventoryQuantity =
+              inventoryResponse.data.data.inventory?.quantity || 0;
+
+            // ✅ Gắn shop từ groupedByShop
+            const shopEntry = Object.values(groupedByShop || {}).find((g) =>
+              g.items.some((i) => i._id === item._id)
+            );
+            if (shopEntry) {
+              item.shop = shopEntry.shop;
+            }
+
             return item;
           } catch (error) {
-            console.error(`Failed to fetch inventory for product ${item.productId._id}:`, error);
+            console.error(
+              `Failed to fetch inventory for product ${item.productId._id}:`,
+              error
+            );
             item.productId.inventoryQuantity = 0;
             return item;
           }
         })
       );
-      
+
       return itemsWithInventory;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to fetch cart');
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to fetch cart'
+      );
     }
   }
 );
@@ -65,16 +81,18 @@ export const updateCartItem = createAsyncThunk(
       if (!token) {
         return rejectWithValue('No token found');
       }
-      
-      // Check inventory before updating
+
       const inventoryQuantity = await getProductInventory(productId, token);
-      
-      // Validate against inventory
+
       if (quantity > inventoryQuantity) {
-        toast.warning(`Cannot add more than ${inventoryQuantity} items (available in stock)`);
-        return rejectWithValue(`Maximum quantity available: ${inventoryQuantity}`);
+        toast.warning(
+          `Cannot add more than ${inventoryQuantity} items (available in stock)`
+        );
+        return rejectWithValue(
+          `Maximum quantity available: ${inventoryQuantity}`
+        );
       }
-      
+
       await axios.put(
         `${API_URL}/buyers/cart/update/${productId}`,
         { quantity },
@@ -82,7 +100,9 @@ export const updateCartItem = createAsyncThunk(
       );
       return { productId, quantity };
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to update cart item');
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to update cart item'
+      );
     }
   }
 );
@@ -100,7 +120,9 @@ export const removeCartItem = createAsyncThunk(
       });
       return productId;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to remove cart item');
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to remove cart item'
+      );
     }
   }
 );
@@ -116,7 +138,7 @@ export const resetCart = createAsyncThunk(
       const state = getState();
       const items = state.cart.items;
       await Promise.all(
-        items.map(item => 
+        items.map((item) =>
           axios.delete(`${API_URL}/buyers/cart/remove/${item.productId._id}`, {
             headers: { Authorization: `Bearer ${token}` },
           })
@@ -124,10 +146,13 @@ export const resetCart = createAsyncThunk(
       );
       return;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to reset cart');
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to reset cart'
+      );
     }
   }
 );
+
 export const removeSelectedItems = createAsyncThunk(
   'cart/removeSelectedItems',
   async (productIds, { getState, rejectWithValue }) => {
@@ -136,29 +161,23 @@ export const removeSelectedItems = createAsyncThunk(
       if (!token) {
         return rejectWithValue('No token found');
       }
-      
-      console.log(`Removing ${productIds.length} items from cart:`, productIds);
-      
-      // Use the bulk removal endpoint instead of multiple individual requests
+
       await axios.post(
         `${API_URL}/buyers/cart/remove-multiple`,
         { productIds },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       return productIds;
     } catch (error) {
       console.error('Failed to remove items from cart:', error);
-      return rejectWithValue(error.response?.data?.message || 'Failed to remove selected items');
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to remove selected items'
+      );
     }
   }
 );
-// Thêm initial state
-const initialState = {
-  items: [],
-  loading: false,
-  error: null
-};
+
 const cartSlice = createSlice({
   name: 'cart',
   initialState: {
@@ -187,7 +206,9 @@ const cartSlice = createSlice({
       })
       .addCase(updateCartItem.fulfilled, (state, action) => {
         const { productId, quantity } = action.payload;
-        const itemIndex = state.items.findIndex(item => item.productId._id === productId);
+        const itemIndex = state.items.findIndex(
+          (item) => item.productId._id === productId
+        );
         if (itemIndex !== -1) {
           state.items[itemIndex].quantity = quantity;
         }
@@ -203,7 +224,9 @@ const cartSlice = createSlice({
       })
       .addCase(removeCartItem.fulfilled, (state, action) => {
         const productId = action.payload;
-        state.items = state.items.filter(item => item.productId._id !== productId);
+        state.items = state.items.filter(
+          (item) => item.productId._id !== productId
+        );
         state.loading = false;
       })
       .addCase(removeCartItem.rejected, (state, action) => {
@@ -228,7 +251,9 @@ const cartSlice = createSlice({
       })
       .addCase(removeSelectedItems.fulfilled, (state, action) => {
         const removedIds = action.payload;
-        state.items = state.items.filter(item => !removedIds.includes(item.productId._id));
+        state.items = state.items.filter(
+          (item) => !removedIds.includes(item.productId._id)
+        );
         state.loading = false;
       })
       .addCase(removeSelectedItems.rejected, (state, action) => {

@@ -25,32 +25,32 @@ export const createPayment = createAsyncThunk(
         orderId: String(paymentData.orderId),
         replaceExisting: paymentData.replaceExisting || false // Add flag to indicate if previous payment should be deleted
       };
-      
+
       console.log('Creating payment with data:', sanitizedData);
-      
+
       const response = await axios.post(`${API_URL}/buyers/payments`, sanitizedData, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      
+
       // Add extra validation to ensure we have required fields based on payment method
       const data = response.data;
-      
+
       if (paymentData.method === 'VietQR' && (!data.qrData || !data.qrData.qrDataURL)) {
         console.error('VietQR API response missing qrData or qrDataURL:', data);
         return rejectWithValue('QR code generation failed. Please try another payment method.');
       }
-      
+
       if (paymentData.method === 'PayOS' && !data.paymentUrl) {
         console.error('PayOS API response missing paymentUrl:', data);
         return rejectWithValue('Payment URL generation failed. Please try another payment method.');
       }
-      
+
       return data;
     } catch (error) {
       console.error('Payment creation error:', error);
       return rejectWithValue(
-        error.response?.data?.message || 
-        error.response?.data?.details || 
+        error.response?.data?.message ||
+        error.response?.data?.details ||
         'Failed to create payment. Please try again.'
       );
     }
@@ -66,16 +66,16 @@ export const checkPaymentStatus = createAsyncThunk(
       if (!token) {
         return rejectWithValue('No token found');
       }
-      
+
       const response = await axios.get(`${API_URL}/buyers/payments/status/${orderId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
+
       return response.data;
     } catch (error) {
       console.error('Payment status check error:', error);
       return rejectWithValue(
-        error.response?.data?.message || 
+        error.response?.data?.message ||
         'Failed to check payment status.'
       );
     }
