@@ -3,7 +3,19 @@ const Address = require('../models/Address');
 // Create a new address
 exports.createAddress = async (req, res) => {
   try {
-    const { fullName, phone, street, city, state, country, isDefault } = req.body;
+    const {
+      fullName,
+      phone,
+      street,
+      city,
+      province_id,
+      state,
+      district_id,
+      ward,
+      ward_code,
+      country,
+      isDefault
+    } = req.body;
     const userId = req.user.id;
 
     if (isDefault) {
@@ -18,6 +30,12 @@ exports.createAddress = async (req, res) => {
       city,
       state,
       country,
+      locationGHN: {
+        province_id,
+        district_id,
+        ward_code,
+        ward
+      },
       isDefault: isDefault || false,
     });
 
