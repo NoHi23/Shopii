@@ -10,6 +10,12 @@ const addressSchema = new Schema(
     city: { type: String, required: true },
     state: { type: String, required: true },
     country: { type: String, required: true },
+    locationGHN: {
+      province_id: { type: Number }, // Mã tỉnh/thành phố GHN
+      district_id: { type: Number }, // Mã quận/huyện GHN
+      ward_code: { type: String },   // Mã phường/xã GHN
+      ward: { type: String },        // Tên phường/xã
+    },
     isDefault: { type: Boolean, default: false },
   },
   { timestamps: true }

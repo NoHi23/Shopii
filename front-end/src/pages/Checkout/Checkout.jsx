@@ -23,7 +23,10 @@ import {
   Chip,
   CircularProgress,
   FormControl,
-  Checkbox
+  Checkbox,
+  Select,
+  MenuItem,
+  InputLabel
 } from "@mui/material";
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import PaymentIcon from '@mui/icons-material/Payment';
@@ -85,14 +88,26 @@ const Checkout = () => {
     phone: "",
     street: "",
     city: "",
+    district: "",
+    province: "",
     state: "",
-    country: "",
+    country: "Việt Nam",
+    province_id: null,
+    district_id: null,
+    ward: "",
+    ward_code: null,
     isDefault: false,
   });
   const [phoneError, setPhoneError] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // Removed payment method state
+  // Thêm các state cho dropdown GHN
+  const [provinces, setProvinces] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [wards, setWards] = useState([]);
+  const [selectedProvince, setSelectedProvince] = useState(null);
+  const [selectedDistrict, setSelectedDistrict] = useState(null);
+  const [selectedWard, setSelectedWard] = useState(null);
 
   // Fetch addresses on component mount and clear voucher on unmount
   useEffect(() => {
@@ -115,6 +130,64 @@ const Checkout = () => {
       }
     }
   }, [addresses]);
+
+  // Lấy danh sách tỉnh/thành phố khi mở modal
+  useEffect(() => {
+    async function fetchProvinces() {
+      try {
+        const res = await fetch('http://localhost:9999/api/ghn/provinces');
+        const data = await res.json();
+        setProvinces(data.data || []);
+      } catch (err) {
+        setProvinces([]);
+      }
+    }
+    fetchProvinces();
+  }, []);
+
+  // Lấy danh sách quận/huyện khi chọn tỉnh
+  useEffect(() => {
+    async function fetchDistricts() {
+      if (selectedProvince) {
+        try {
+          const res = await fetch(`http://localhost:9999/api/ghn/districts?province_id=${selectedProvince}`);
+          const data = await res.json();
+          setDistricts(data.data || []);
+        } catch (err) {
+          setDistricts([]);
+        }
+        setSelectedDistrict(null);
+        setWards([]);
+        setSelectedWard(null);
+      } else {
+        setDistricts([]);
+        setWards([]);
+        setSelectedDistrict(null);
+        setSelectedWard(null);
+      }
+    }
+    fetchDistricts();
+  }, [selectedProvince]);
+
+  // Lấy danh sách phường/xã khi chọn quận/huyện
+  useEffect(() => {
+    async function fetchWards() {
+      if (selectedDistrict) {
+        try {
+          const res = await fetch(`http://localhost:9999/api/ghn/wards?district_id=${selectedDistrict}`);
+          const data = await res.json();
+          setWards(data.data || []);
+        } catch (err) {
+          setWards([]);
+        }
+        setSelectedWard(null);
+      } else {
+        setWards([]);
+        setSelectedWard(null);
+      }
+    }
+    fetchWards();
+  }, [selectedDistrict]);
 
   // Validate phone number
   const validatePhoneNumber = (phone) => {
@@ -159,7 +232,7 @@ const Checkout = () => {
     dispatch(addAddress(newAddress));
     setIsAddressModalOpen(false);
     setNewAddress({
-      fullName: "", phone: "", street: "", city: "", state: "", country: "", isDefault: false,
+      fullName: "", phone: "", street: "", city: "", district: "", province: "", state: "", country: "Việt Nam", province_id: null, district_id: null, ward: "", ward_code: null, isDefault: false,
     });
   };
 
@@ -221,6 +294,53 @@ const Checkout = () => {
       toast.error(error);
       setIsProcessing(false);
     }
+  };
+
+  // Khi chọn tỉnh
+  const handleProvinceChange = (e) => {
+    const provinceId = e.target.value;
+    const provinceObj = provinces.find(p => p.ProvinceID === Number(provinceId));
+    setSelectedProvince(provinceId);
+    setNewAddress({
+      ...newAddress,
+      province: provinceObj ? provinceObj.ProvinceName : "",
+      province_id: provinceObj ? provinceObj.ProvinceID : null,
+      state: provinceObj ? provinceObj.ProvinceName : "",
+      city: "",
+      district: "",
+      district_id: null,
+      ward: "",
+      ward_code: null,
+    });
+  };
+
+  // Khi chọn quận/huyện
+  const handleDistrictChange = (e) => {
+    const districtId = e.target.value;
+    const districtObj = districts.find(d => d.DistrictID === Number(districtId));
+    setSelectedDistrict(districtId);
+    setNewAddress({
+      ...newAddress,
+      district: districtObj ? districtObj.DistrictName : "",
+      district_id: districtObj ? districtObj.DistrictID : null,
+      city: districtObj ? districtObj.DistrictName : "",
+      ward: "",
+      ward_code: null,
+    });
+  };
+
+  // Khi chọn phường/xã
+  const handleWardChange = (e) => {
+    const wardCode = e.target.value;
+    const wardObj = wards.find(w => w.WardCode === wardCode);
+    setSelectedWard(wardCode);
+    setNewAddress({
+      ...newAddress,
+      ward: wardObj ? wardObj.WardName : "",
+      ward_code: wardObj ? wardObj.WardCode : null,
+    });
+    console.log("ward:đây ", wardObj ? wardObj.WardName : "");
+    console.log("address final:", newAddress);
   };
 
   return (
@@ -616,26 +736,60 @@ const Checkout = () => {
               />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="City"
-                value={newAddress.city}
-                onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
-                variant="outlined"
-                size="small"
-                required
-              />
+              <FormControl fullWidth margin="normal" variant="outlined" size="small">
+                <InputLabel id="province-label" shrink>City / Province</InputLabel>
+                <Select
+                  labelId="province-label"
+                  value={selectedProvince || ''}
+                  onChange={handleProvinceChange}
+                  label="City / Province"
+                  displayEmpty
+                  notched
+                >
+                  <MenuItem value="">Chọn tỉnh/thành phố</MenuItem>
+                  {provinces.map(p => (
+                    <MenuItem key={p.ProvinceID} value={p.ProvinceID}>{p.ProvinceName}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="State/Province"
-                value={newAddress.state}
-                onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
-                variant="outlined"
-                size="small"
-                required
-              />
+              <FormControl fullWidth margin="normal" variant="outlined" size="small">
+                <InputLabel id="district-label" shrink>State / District</InputLabel>
+                <Select
+                  labelId="district-label"
+                  value={selectedDistrict || ''}
+                  onChange={handleDistrictChange}
+                  label="State / District"
+                  displayEmpty
+                  disabled={!selectedProvince}
+                  notched
+                >
+                  <MenuItem value="">Chọn quận/huyện</MenuItem>
+                  {districts.map(d => (
+                    <MenuItem key={d.DistrictID} value={d.DistrictID}>{d.DistrictName}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth margin="normal" variant="outlined" size="small">
+                <InputLabel id="ward-label" shrink>Ward</InputLabel>
+                <Select
+                  labelId="ward-label"
+                  value={selectedWard || ''}
+                  onChange={handleWardChange}
+                  label="Ward"
+                  displayEmpty
+                  disabled={!selectedDistrict}
+                  notched
+                >
+                  <MenuItem value="">Chọn phường/xã</MenuItem>
+                  {wards.map(w => (
+                    <MenuItem key={w.WardCode} value={w.WardCode}>{w.WardName}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             <Grid item xs={12}>
               <TextField
@@ -661,6 +815,9 @@ const Checkout = () => {
               />
             </Grid>
           </Grid>
+          
+          {/* Thêm dropdown chọn tỉnh, quận/huyện, phường/xã */}
+         
           
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3, gap: 2 }}>
             <Button
