@@ -18,12 +18,12 @@ const OrderDetail = () => {
   const [searchParams] = useSearchParams();
   const disputeId = searchParams.get('disputeId');
   const focusItemId = searchParams.get('focusItemId');
-  
+
   const { orderDetails, loading } = useSelector((state) => state.order);
   const { success: reviewSuccess, loading: reviewLoading, userReviews } = useSelector((state) => state.review);
   const { currentDispute, loading: disputeLoading } = useSelector((state) => state.dispute);
   const { success: returnRequestSuccess, loading: returnRequestLoading } = useSelector((state) => state.returnRequest || {});
-  
+
   // State for review form
   const [reviewForm, setReviewForm] = useState({
     productId: '',
@@ -31,43 +31,82 @@ const OrderDetail = () => {
     comment: '',
   });
   const [reviewFormVisible, setReviewFormVisible] = useState(false);
-  
+
   // State for return request form
   const [returnForm, setReturnForm] = useState({
     orderItemId: '',
     reason: '',
   });
   const [returnFormVisible, setReturnFormVisible] = useState(false);
-  
+
   // State for payment status
   const [paymentStatus, setPaymentStatus] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState(null);
   const [checkingPayment, setCheckingPayment] = useState(false);
-  
+
   // Track which products have been reviewed
   const [reviewedProducts, setReviewedProducts] = useState(new Set());
   const [reviewedProductsList, setReviewedProductsList] = useState([]);
-  
+
   // Track which items have return requests
   const [returnRequestedItems, setReturnRequestedItems] = useState(new Set());
-  
+
   // State for dispute display
   const [showDisputeDetails, setShowDisputeDetails] = useState(false);
+  // tính tiền
+  const [itemsTotal, setItemsTotal] = useState(0);
+  const [shippingFee, setShippingFee] = useState(0);
+
+  useEffect(() => {
+    if (orderDetails && orderDetails.items) {
+      // tính itemsTotal (tổng product)
+      const totalProducts = orderDetails.items.reduce((sum, item) => {
+        return sum + (item.unitPrice || 0) * item.quantity;
+      }, 0);
+      setItemsTotal(totalProducts);
+
+      // gọi API tính ship (dùng addressId + fromDistrictId của shop nếu có)
+      const fetchShippingFee = async () => {
+        try {
+          if (!orderDetails.addressId?.locationGHN) return;
+
+          const res = await fetch("http://localhost:9999/api/ghn/calc-fee-simple", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              from_district_id: orderDetails.items[0]?.productId?.shop?.fromDistrictId || 0,
+              to_district_id: orderDetails.addressId.locationGHN.district_id,
+              to_ward_code: orderDetails.addressId.locationGHN.ward_code,
+              weight: orderDetails.items.reduce((sum, i) => sum + i.quantity * 500, 0)
+            })
+          });
+          const data = await res.json();
+          setShippingFee(data?.data?.total || 0);
+        } catch (err) {
+          console.error("Ship fee error:", err);
+          setShippingFee(0);
+        }
+      };
+
+      fetchShippingFee();
+    }
+  }, [orderDetails]);
+
 
   useEffect(() => {
     if (id) {
       dispatch(fetchOrderDetails(id));
     }
-    
+
     // Fetch user reviews to check which products have already been reviewed
     dispatch(fetchUserReviews({ page: 1, limit: 100 }));
-    
+
     // If disputeId is provided, fetch dispute details
     if (disputeId) {
       dispatch(fetchDisputeDetails(disputeId));
       setShowDisputeDetails(true);
     }
-    
+
     // Cleanup when component unmounts
     return () => {
       dispatch(clearOrderDetails());
@@ -78,7 +117,7 @@ const OrderDetail = () => {
   useEffect(() => {
     if (orderDetails && orderDetails._id) {
       setCheckingPayment(true);
-      
+
       dispatch(checkPaymentStatus(orderDetails._id))
         .then((resultAction) => {
           if (checkPaymentStatus.fulfilled.match(resultAction)) {
@@ -92,18 +131,18 @@ const OrderDetail = () => {
         });
     }
   }, [dispatch, orderDetails]);
-  
+
   // Update reviewedProducts Set when userReviews are fetched
   useEffect(() => {
     if (userReviews && userReviews.length > 0) {
       const reviewedProductIds = new Set();
       const reviewedList = [];
-      
+
       userReviews.forEach(review => {
         // Only consider primary reviews (not replies)
         if (review.parentId === null || !review.parentId) {
           let productId = null;
-          
+
           if (review.productId?._id) {
             productId = review.productId._id;
             reviewedProductIds.add(productId);
@@ -111,16 +150,16 @@ const OrderDetail = () => {
             productId = review.productId;
             reviewedProductIds.add(productId);
           }
-          
+
           if (productId) {
             reviewedList.push(productId);
           }
         }
       });
-      
+
       setReviewedProductsList(reviewedList);
       setReviewedProducts(reviewedProductIds);
-      
+
       // Debug log to check what products are being marked as reviewed
       console.log('Reviewed products:', [...reviewedProductIds]);
     }
@@ -135,12 +174,12 @@ const OrderDetail = () => {
         comment: '',
       });
       setReviewFormVisible(false);
-      
+
       // Refresh user reviews to update the list of reviewed products
       dispatch(fetchUserReviews({ page: 1, limit: 100 }));
     }
   }, [reviewSuccess, dispatch]);
-  
+
   // Reset return form when return request submission is successful
   useEffect(() => {
     if (returnRequestSuccess) {
@@ -149,7 +188,7 @@ const OrderDetail = () => {
         reason: '',
       });
       setReturnFormVisible(false);
-      
+
       // Add the order item ID to the return requested items set
       if (returnForm.orderItemId) {
         setReturnRequestedItems(prev => new Set([...prev, returnForm.orderItemId]));
@@ -198,7 +237,7 @@ const OrderDetail = () => {
     e.preventDefault();
     dispatch(createReview(reviewForm));
   };
-  
+
   const handleReturnChange = (e) => {
     const { name, value } = e.target;
     setReturnForm((prev) => ({
@@ -206,7 +245,7 @@ const OrderDetail = () => {
       [name]: value,
     }));
   };
-  
+
   const showReturnForm = (orderItemId) => {
     setReturnForm({
       orderItemId,
@@ -214,20 +253,20 @@ const OrderDetail = () => {
     });
     setReturnFormVisible(true);
   };
-  
+
   const handleReturnSubmit = (e) => {
     e.preventDefault();
     dispatch(createReturnRequest(returnForm));
   };
-  
+
   // Handler for proceeding to payment
   const handleProceedToPayment = () => {
     if (!orderDetails || !orderDetails._id) return;
-    
+
     toast.info("Redirecting to payment page...");
-    navigate('/payment', { 
-      state: { 
-        orderId: orderDetails._id, 
+    navigate('/payment', {
+      state: {
+        orderId: orderDetails._id,
         totalPrice: orderDetails.totalPrice,
         preferredMethod: 'PayOS',
         directPayment: true, // This will trigger automatic payment
@@ -235,21 +274,21 @@ const OrderDetail = () => {
       }
     });
   };
-  
+
   // Check if we should show the payment button
   const shouldShowPaymentButton = () => {
     // Hide button when checking payment status
     if (checkingPayment) return false;
-    
+
     // Don't show payment button for COD orders
     if (paymentMethod === 'COD') return false;
-    
+
     // Show payment button if there's no payment record or payment failed
     if (!paymentStatus || paymentStatus === 'failed') return true;
-    
+
     // Don't show button if payment is completed
     if (paymentStatus === 'paid') return false;
-    
+
     // For all other cases (pending, etc), show the button
     return true;
   };
@@ -278,7 +317,7 @@ const OrderDetail = () => {
         return 'bg-gray-100 text-gray-800 border-gray-300';
     }
   };
-  
+
   // Helper function to get payment status badge color
   const getPaymentStatusBadgeColor = (status) => {
     switch (status) {
@@ -292,7 +331,7 @@ const OrderDetail = () => {
         return 'bg-gray-100 text-gray-800 border-gray-300';
     }
   };
-  
+
   // Helper function to get dispute status badge color
   const getDisputeStatusBadgeColor = (status) => {
     switch (status) {
@@ -308,7 +347,7 @@ const OrderDetail = () => {
         return 'bg-gray-100 text-gray-800 border-gray-300';
     }
   };
-  
+
   // Helper function to get status icon
   const getStatusIcon = (status) => {
     switch (status) {
@@ -325,7 +364,7 @@ const OrderDetail = () => {
         return null;
     }
   };
-  
+
   // Helper function to get payment status icon
   const getPaymentStatusIcon = (status) => {
     switch (status) {
@@ -339,7 +378,7 @@ const OrderDetail = () => {
         return <FaMoneyBill className="mr-1" />;
     }
   };
-  
+
   // Get payment method display text
   const getPaymentMethodText = (method) => {
     switch (method) {
@@ -357,7 +396,7 @@ const OrderDetail = () => {
   // Only show review button for shipped items that haven't been reviewed yet
   const canReview = (item) => {
     if (!item || !item.productId) return false;
-    
+
     const productId = item.productId._id;
     // Make sure item is shipped and has not been reviewed yet
     return item.status === 'shipped' && !reviewedProducts.has(productId);
@@ -366,15 +405,15 @@ const OrderDetail = () => {
   // Only show dispute button for shipped items that haven't been disputed yet
   const canDispute = (item) => {
     if (!item || !item.productId) return false;
-    
+
     // Can only dispute shipped items
     return item.status === 'shipped';
   };
-  
+
   // Check if item can be returned (shipped items that haven't been returned yet)
   const canReturn = (item) => {
     if (!item || !item._id) return false;
-    
+
     // Can only return shipped items and not already requested
     return item.status === 'shipped' && !returnRequestedItems.has(item._id);
   };
@@ -405,8 +444,8 @@ const OrderDetail = () => {
           </div>
           <h2 className="text-2xl font-bold text-gray-700 mb-4">Order not found</h2>
           <p className="text-gray-600 mb-6">We couldn't find the order you're looking for.</p>
-          <Link 
-            to="/order-history" 
+          <Link
+            to="/order-history"
             className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 transition-colors text-white font-medium px-6 py-3 rounded-lg"
           >
             <FaArrowLeft className="text-sm" /> Back to Order History
@@ -418,20 +457,20 @@ const OrderDetail = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="mb-6"
       >
-        <Link 
-          to="/order-history" 
+        <Link
+          to="/order-history"
           className="text-blue-600 hover:text-blue-800 inline-flex items-center gap-2 font-medium transition-colors"
         >
           <FaArrowLeft className="text-sm" /> Back to Order History
         </Link>
       </motion.div>
-      
-      <motion.div 
+
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1 }}
@@ -452,13 +491,13 @@ const OrderDetail = () => {
               Placed on {formatDate(orderDetails.orderDate || orderDetails.createdAt)}
             </p>
           </div>
-          
+
           <div className="flex flex-col gap-3">
-          <div className={`px-4 py-2 rounded-full text-sm font-medium flex items-center border ${getStatusBadgeColor(orderDetails.status)}`}>
-            {getStatusIcon(orderDetails.status)}
-            {orderDetails.status.charAt(0).toUpperCase() + orderDetails.status.slice(1)}
+            <div className={`px-4 py-2 rounded-full text-sm font-medium flex items-center border ${getStatusBadgeColor(orderDetails.status)}`}>
+              {getStatusIcon(orderDetails.status)}
+              {orderDetails.status.charAt(0).toUpperCase() + orderDetails.status.slice(1)}
             </div>
-            
+
             {/* Payment Status Badge */}
             {checkingPayment ? (
               <div className="flex items-center gap-2 text-gray-500">
@@ -481,7 +520,7 @@ const OrderDetail = () => {
                 )}
               </div>
             )}
-            
+
             {/* Pay Now Button - Only show if not COD and not paid */}
             {shouldShowPaymentButton() && (
               <button
@@ -494,10 +533,10 @@ const OrderDetail = () => {
             )}
           </div>
         </div>
-        
+
         {/* Show dispute details if available */}
         {currentDispute && showDisputeDetails && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             className="mb-8 p-4 border border-red-200 bg-red-50 rounded-lg"
@@ -514,18 +553,18 @@ const OrderDetail = () => {
                 {currentDispute.status.replace('_', ' ').charAt(0).toUpperCase() + currentDispute.status.replace('_', ' ').slice(1)}
               </div>
             </div>
-            
+
             <div className="mb-2">
               <p className="text-sm text-gray-500">Filed on: {formatDate(currentDispute.createdAt)}</p>
             </div>
-            
+
             <div className="mb-4">
               <h4 className="text-sm font-medium text-gray-700 mb-2">Description:</h4>
               <p className="bg-white p-3 rounded-lg text-gray-700 border border-red-100 whitespace-pre-line">
                 {currentDispute.description}
               </p>
             </div>
-            
+
             {currentDispute.resolution && (
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-2">Resolution:</h4>
@@ -534,7 +573,7 @@ const OrderDetail = () => {
                 </p>
               </div>
             )}
-            
+
             <button
               onClick={() => setShowDisputeDetails(false)}
               className="mt-3 text-gray-600 hover:text-gray-800 font-medium text-sm"
@@ -543,9 +582,9 @@ const OrderDetail = () => {
             </button>
           </motion.div>
         )}
-        
+
         <div className="grid md:grid-cols-2 gap-8 mb-10">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
@@ -567,8 +606,8 @@ const OrderDetail = () => {
               <p className="text-gray-500 italic">Address information not available</p>
             )}
           </motion.div>
-          
-          <motion.div 
+
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
@@ -581,18 +620,22 @@ const OrderDetail = () => {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-gray-600">Items total:</span>
-                <span className="font-medium">${orderDetails.totalPrice.toFixed(2)}</span>
+                <span className="font-medium">₫{itemsTotal.toLocaleString()}</span>
               </div>
+
               <div className="flex justify-between">
-                <span className="text-gray-600">Shipping:</span>
-                <span className="font-medium">Free</span>
+                <span className="text-gray-600">Shipping Fee:</span>
+                <span className="font-medium">
+                  ₫{(orderDetails.totalPrice - itemsTotal).toLocaleString()}
+                </span>
               </div>
+
               <div className="h-px bg-gray-200 my-2"></div>
               <div className="flex justify-between text-lg">
                 <span className="font-bold text-gray-800">Total:</span>
                 <span className="font-bold text-blue-600">${orderDetails.totalPrice.toFixed(2)}</span>
               </div>
-              
+
               {/* Payment Status */}
               <div className="h-px bg-gray-200 my-2"></div>
               <div className="flex justify-between items-center">
@@ -619,7 +662,7 @@ const OrderDetail = () => {
                   </div>
                 )}
               </div>
-              
+
               {/* Pay Now Button */}
               {shouldShowPaymentButton() && (
                 <div className="mt-4">
@@ -636,7 +679,7 @@ const OrderDetail = () => {
           </motion.div>
         </div>
 
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
@@ -645,7 +688,7 @@ const OrderDetail = () => {
             <FaBox className="text-blue-500" />
             Order Items
           </h2>
-          
+
           <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -660,9 +703,9 @@ const OrderDetail = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {orderDetails.items && orderDetails.items.map((item, index) => (
-                  <motion.tr 
+                  <motion.tr
                     id={`order-item-${item._id}`}
-                    key={item._id} 
+                    key={item._id}
                     className={`hover:bg-gray-50 transition-colors ${item._id === focusItemId ? 'bg-yellow-50' : ''}`}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -672,9 +715,9 @@ const OrderDetail = () => {
                       <div className="flex items-center">
                         {item.productId?.image ? (
                           <div className="flex-shrink-0 h-14 w-14 mr-4">
-                            <img 
-                              src={item.productId.image} 
-                              alt={item.productId?.title} 
+                            <img
+                              src={item.productId.image}
+                              alt={item.productId?.title}
                               className="h-14 w-14 object-cover rounded-lg shadow-sm"
                             />
                           </div>
@@ -707,33 +750,33 @@ const OrderDetail = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-gray-900">
                       ${(item.unitPrice * item.quantity).toFixed(2)}
                     </td>
-                                                  <td className="px-6 py-4 whitespace-nowrap text-right">
-  {item.status === 'shipped' && item.productId && (
-    <>
-      {reviewedProducts.has(item.productId._id) ? (
-        <span className="text-green-600 bg-green-50 px-3 py-1.5 rounded-lg text-sm font-medium inline-flex items-center gap-1">
-          <FaCheck className="text-xs" /> Reviewed
-        </span>
-      ) : (
-        <button
-          className="text-blue-600 hover:text-blue-800 font-medium bg-blue-50 hover:bg-blue-100 transition-colors px-3 py-1.5 rounded-lg text-sm"
-          onClick={() => showReviewForm(item.productId._id)}
-        >
-          Leave Review
-        </button>
-      )}
-    </>
-  )}
-                        <div className="mt-2 flex gap-2 justify-end flex-wrap">
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      {item.status === 'shipped' && item.productId && (
+                        <>
+                          {reviewedProducts.has(item.productId._id) ? (
+                            <span className="text-green-600 bg-green-50 px-3 py-1.5 rounded-lg text-sm font-medium inline-flex items-center gap-1">
+                              <FaCheck className="text-xs" /> Reviewed
+                            </span>
+                          ) : (
+                            <button
+                              className="text-blue-600 hover:text-blue-800 font-medium bg-blue-50 hover:bg-blue-100 transition-colors px-3 py-1.5 rounded-lg text-sm"
+                              onClick={() => showReviewForm(item.productId._id)}
+                            >
+                              Leave Review
+                            </button>
+                          )}
+                        </>
+                      )}
+                      <div className="mt-2 flex gap-2 justify-end flex-wrap">
                         {canDispute(item) && (
                           <div>
                             {/* If this item has a current dispute that matches the one we fetched */}
                             {hasDispute(item._id) ? (
                               <div className="flex items-center justify-end gap-1 text-sm text-red-600">
-                                <FaExclamationCircle className="text-xs" /> 
+                                <FaExclamationCircle className="text-xs" />
                                 <span>Disputed</span>
                                 {!showDisputeDetails && (
-                                  <button 
+                                  <button
                                     onClick={() => setShowDisputeDetails(true)}
                                     className="ml-2 underline text-blue-600 hover:text-blue-800"
                                   >
@@ -751,7 +794,7 @@ const OrderDetail = () => {
                             )}
                           </div>
                         )}
-                        
+
                         {canReturn(item) && (
                           <button
                             onClick={() => showReturnForm(item._id)}
@@ -760,10 +803,10 @@ const OrderDetail = () => {
                             <FaExchangeAlt className="text-xs" /> Return Item
                           </button>
                         )}
-                        
+
                         {returnRequestedItems.has(item._id) && (
                           <div className="flex items-center justify-end gap-1 text-sm text-amber-600">
-                            <FaExchangeAlt className="text-xs" /> 
+                            <FaExchangeAlt className="text-xs" />
                             <span>Return Requested</span>
                           </div>
                         )}
@@ -787,17 +830,17 @@ const OrderDetail = () => {
           </div>
         </motion.div>
       </motion.div>
-      
+
       {/* Review Form Modal */}
       <AnimatePresence>
         {reviewFormVisible && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-gray-900 bg-opacity-60 overflow-y-auto h-full w-full z-50 flex items-center justify-center backdrop-blur-sm"
           >
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
@@ -812,7 +855,7 @@ const OrderDetail = () => {
                   &times;
                 </button>
               </div>
-              
+
               <form onSubmit={handleReviewSubmit}>
                 <div className="mb-6">
                   <label className="block text-gray-700 text-sm font-bold mb-3">
@@ -826,15 +869,15 @@ const OrderDetail = () => {
                         onClick={() => handleRatingChange(star)}
                         className="text-2xl focus:outline-none transition-transform hover:scale-110"
                       >
-                        {star <= reviewForm.rating ? 
-                          <FaStar className="text-yellow-400" /> : 
+                        {star <= reviewForm.rating ?
+                          <FaStar className="text-yellow-400" /> :
                           <FaRegStar className="text-gray-300" />
                         }
                       </button>
                     ))}
                   </div>
                 </div>
-                
+
                 <div className="mb-6">
                   <label htmlFor="comment" className="block text-gray-700 text-sm font-bold mb-3">
                     Your Review
@@ -850,7 +893,7 @@ const OrderDetail = () => {
                     placeholder="Share your experience with this product..."
                   ></textarea>
                 </div>
-                
+
                 <div className="flex justify-end gap-3">
                   <button
                     type="button"
@@ -880,17 +923,17 @@ const OrderDetail = () => {
           </motion.div>
         )}
       </AnimatePresence>
-      
+
       {/* Return Request Form Modal */}
       <AnimatePresence>
         {returnFormVisible && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-gray-900 bg-opacity-60 overflow-y-auto h-full w-full z-50 flex items-center justify-center backdrop-blur-sm"
           >
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
@@ -905,7 +948,7 @@ const OrderDetail = () => {
                   &times;
                 </button>
               </div>
-              
+
               <form onSubmit={handleReturnSubmit}>
                 <div className="mb-6">
                   <label htmlFor="reason" className="block text-gray-700 text-sm font-bold mb-3">
@@ -922,7 +965,7 @@ const OrderDetail = () => {
                     placeholder="Please explain why you want to return this item..."
                   ></textarea>
                 </div>
-                
+
                 <div className="flex justify-end gap-3">
                   <button
                     type="button"
@@ -952,7 +995,7 @@ const OrderDetail = () => {
           </motion.div>
         )}
       </AnimatePresence>
-      
+
       {/* Add CSS for highlight animation */}
       <style jsx="true">{`
         .highlight-item {

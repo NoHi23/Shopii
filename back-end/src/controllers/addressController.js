@@ -1,4 +1,5 @@
 const Address = require('../models/Address');
+const Store = require('../models/Store')
 
 // Create a new address
 exports.createAddress = async (req, res) => {

@@ -52,6 +52,23 @@ class CartService {
       throw new Error(error.response ? error.response.data.message : error.message);
     }
   }
+
+  // ==== API tính phí ship ====
+  async calculateShippingFee(shopGroup, selectedAddress) {
+    try {
+      const payload = {
+        from_district_id: shopGroup.shop?.districtId,
+        to_district_id: selectedAddress?.districtId,
+        to_ward_code: selectedAddress?.wardCode,
+        weight: shopGroup.items.reduce((sum, i) => sum + i.quantity * 500, 0) // giả sử mỗi sp 500g
+      };
+
+      const { data } = await api.post('/shipping/calc-fee-simple', payload);
+      return data?.data?.total || 0;
+    } catch (error) {
+      throw new Error(error.response ? error.response.data.message : error.message);
+    }
+  }
 }
 
 export default new CartService();
