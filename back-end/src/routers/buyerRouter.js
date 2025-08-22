@@ -53,6 +53,7 @@ orderRoutes.post('/', orderController.createOrder);
 orderRoutes.get('/', orderController.getBuyerOrders);
 orderRoutes.get('/:id', orderController.getOrderDetails);
 orderRoutes.put('/items/:id/status', orderController.updateOrderItemStatus);
+orderRoutes.put('/:id/cancel', orderController.cancelOrder);
 buyerRouter.use('/orders', orderRoutes);
 
 // Quản lý thanh toán

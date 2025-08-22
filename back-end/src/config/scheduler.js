@@ -1,6 +1,59 @@
 // scheduler.js
 const cron = require('node-cron');
 const { verifyPendingPayments } = require('../services/paymentVerificationService');
+const Order = require('../models/Order');
+const OrderItem = require('../models/OrderItem');
+const Inventory = require('../models/Inventory');
+
+/**
+ * Tự động hủy đơn hàng hết thời gian thanh toán
+ */
+const cancelExpiredOrders = async () => {
+  try {
+    console.log('Running scheduled order cancellation task...');
+    
+    // Tìm các đơn hàng pending được tạo cách đây hơn 5 phút
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    
+         const expiredOrders = await Order.find({
+       status: 'pending',
+       createdAt: { $lt: fiveMinutesAgo }
+     });
+
+    console.log(`Found ${expiredOrders.length} expired orders to cancel`);
+
+    for (const order of expiredOrders) {
+      try {
+        // Cập nhật trạng thái đơn hàng thành cancelled
+        await Order.findByIdAndUpdate(order._id, { status: 'cancelled' });
+
+        // Cập nhật trạng thái tất cả order items thành cancelled
+        await OrderItem.updateMany(
+          { orderId: order._id },
+          { status: 'cancelled' }
+        );
+
+        // Khôi phục inventory cho tất cả sản phẩm trong đơn hàng
+        const orderItems = await OrderItem.find({ orderId: order._id });
+        for (const item of orderItems) {
+          const inventory = await Inventory.findOne({ productId: item.productId });
+          if (inventory) {
+            inventory.quantity += item.quantity;
+            await inventory.save();
+          }
+        }
+
+        
+
+        console.log(`Successfully cancelled order ${order._id}`);
+      } catch (error) {
+        console.error(`Error cancelling order ${order._id}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error('Error in cancelExpiredOrders:', error);
+  }
+};
 
 /**
  * Khởi tạo tất cả các công việc định kỳ
@@ -11,8 +64,13 @@ const initScheduler = () => {
     console.log('Running scheduled payment verification task...');
     await verifyPendingPayments();
   });
+
+  // Tự động hủy đơn hàng hết thời gian thanh toán mỗi 2 phút
+  cron.schedule('*/2 * * * *', async () => {
+    await cancelExpiredOrders();
+  });
   
-  console.log('Payment verification scheduler initialized');
+  console.log('Payment verification and order cancellation schedulers initialized');
 };
 
 module.exports = {

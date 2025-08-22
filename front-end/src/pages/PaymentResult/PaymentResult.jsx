@@ -164,6 +164,12 @@ const PaymentResult = () => {
     if (!isVerifying && paymentResult.status && paymentResult.status !== 'unknown') {
       if (paymentResult.status === 'paid') {
         toast.success('Thanh toán thành công!');
+        // Xóa timer khi thanh toán thành công
+        const orderId = paymentResult.orderId;
+        if (orderId) {
+          const startTimeKey = `payment_start_time_${orderId}`;
+          localStorage.removeItem(startTimeKey);
+        }
       } else if (paymentResult.status === 'failed') {
         toast.error('Thanh toán thất bại!');
       } else {
@@ -171,7 +177,7 @@ const PaymentResult = () => {
       }
     }
     // Phụ thuộc vào trạng thái xác minh và kết quả thanh toán. Không phụ thuộc vào countDown.
-  }, [isVerifying, paymentResult.status, paymentResult.message]);
+  }, [isVerifying, paymentResult.status, paymentResult.message, paymentResult.orderId]);
 
 
   useEffect(() => {

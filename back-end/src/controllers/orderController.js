@@ -373,4 +373,56 @@ const updateOrderItemStatus = async (req, res) => {
   }
 };
 
-module.exports = { createOrder, getBuyerOrders, getOrderDetails, updateOrderItemStatus };
+// Cancel order (for payment timeout)
+const cancelOrder = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const buyerId = req.user.id;
+
+    // Find order and verify it belongs to the current buyer
+    const order = await Order.findOne({ _id: orderId, buyerId });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found or unauthorized' });
+    }
+
+    // Check if order can be cancelled (only pending orders)
+    if (order.status !== 'pending') {
+      return res.status(400).json({ error: 'Order cannot be cancelled. Only pending orders can be cancelled.' });
+    }
+
+    // Update order status to cancelled
+    const updatedOrder = await Order.findByIdAndUpdate(
+      orderId,
+      { status: 'cancelled' },
+      { new: true }
+    );
+
+    // Update all order items to cancelled
+    await OrderItem.updateMany(
+      { orderId },
+      { status: 'cancelled' }
+    );
+
+    // Restore inventory for all items in the order
+    const orderItems = await OrderItem.find({ orderId });
+    for (const item of orderItems) {
+      const inventory = await Inventory.findOne({ productId: item.productId });
+      if (inventory) {
+        inventory.quantity += item.quantity;
+        await inventory.save();
+      }
+    }
+
+    
+
+    return res.status(200).json({
+      message: 'Order cancelled successfully',
+      order: updatedOrder
+    });
+  } catch (error) {
+    console.error('Error cancelling order:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+};
+
+module.exports = { createOrder, getBuyerOrders, getOrderDetails, updateOrderItemStatus, cancelOrder };

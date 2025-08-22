@@ -22,6 +22,7 @@ import {
 import PaymentIcon from "@mui/icons-material/Payment";
 import LocalAtmIcon from "@mui/icons-material/LocalAtm";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import CountdownTimer from "../../components/common/CountdownTimer";
 
 const Payment = () => {
   const location = useLocation();
@@ -38,6 +39,8 @@ const Payment = () => {
   // Mặc định là PayPal nếu đến từ trang order, ngược lại là COD
   const preferredMethod = comingFromOrderPage ? 'PayPal' : 'COD';
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(preferredMethod);
+  const [isTimeExpired, setIsTimeExpired] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const { payment, loading, error, success } = useSelector((state) => state.payment);
 
@@ -45,6 +48,10 @@ const Payment = () => {
   useEffect(() => {
     // Nếu tạo payment thành công
     if (success && payment) {
+      // Xóa thời gian bắt đầu khỏi localStorage khi thanh toán thành công
+      const startTimeKey = `payment_start_time_${orderId}`;
+      localStorage.removeItem(startTimeKey);
+      
       if (selectedPaymentMethod === 'PayPal') {
         // Nếu có paymentUrl, chuyển hướng người dùng đến PayPal
         if (payment.paymentUrl) {
@@ -75,6 +82,51 @@ const Payment = () => {
     }
   }, [success, error, payment, selectedPaymentMethod, dispatch, navigate, orderId]);
 
+  // Xử lý khi hết thời gian thanh toán
+  const handleTimeExpired = async () => {
+    // Tránh gọi API nhiều lần
+    if (isCancelling) {
+      console.log('Already cancelling order, skipping...');
+      return;
+    }
+    
+    console.log('Starting order cancellation process...');
+    setIsCancelling(true);
+    
+    try {
+      // Xóa thời gian bắt đầu khỏi localStorage
+      const startTimeKey = `payment_start_time_${orderId}`;
+      localStorage.removeItem(startTimeKey);
+      console.log('Removed payment start time from localStorage');
+      
+      // Gọi API để hủy đơn hàng
+      const response = await fetch(`http://localhost:9999/api/buyers/orders/${orderId}/cancel`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      console.log('API response status:', response.status);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Order cancelled successfully:', result);
+        toast.error('Đơn hàng đã bị hủy tự động do hết thời gian thanh toán.');
+        navigate('/cart', { replace: true });
+      } else {
+        const errorData = await response.json();
+        console.error('API error:', errorData);
+        toast.error(errorData.error || 'Có lỗi xảy ra khi hủy đơn hàng.');
+        setIsCancelling(false); // Reset để có thể thử lại
+      }
+    } catch (error) {
+      console.error('Error canceling order:', error);
+      toast.error('Có lỗi xảy ra khi hủy đơn hàng.');
+      setIsCancelling(false); // Reset để có thể thử lại
+    }
+  };
 
   // Nếu không có orderId, quay về trang chủ
   useEffect(() => {
@@ -83,6 +135,13 @@ const Payment = () => {
       navigate("/", { replace: true });
     }
   }, [orderId, navigate]);
+
+  // Tự động hủy đơn hàng khi hết thời gian
+  useEffect(() => {
+    if (isTimeExpired && !isCancelling) {
+      handleTimeExpired();
+    }
+  }, [isTimeExpired]);
 
 
   // Hàm xử lý khi nhấn nút thanh toán
@@ -146,6 +205,17 @@ const Payment = () => {
         <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 700, color: '#0F52BA' }}>
           Chọn phương thức thanh toán
         </Typography>
+        
+        {/* Countdown Timer */}
+        <CountdownTimer
+          initialTime={300} // 5 phút
+          onTimeExpired={handleTimeExpired}
+          orderId={orderId}
+          showWarning={true}
+          isPaymentCompleted={success && payment}
+          onExpiredStateChange={setIsTimeExpired}
+        />
+        
         <Grid container spacing={4}>
           <Grid item xs={12} md={7}>
             <Paper elevation={3} sx={{ p: 4, borderRadius: 2 }}>
@@ -157,11 +227,35 @@ const Payment = () => {
                 fullWidth
                 size="large"
                 onClick={handlePayment}
-                disabled={loading}
-                sx={{ mt: 3, py: 1.5, backgroundColor: '#0F52BA', fontWeight: 600 }}
+                disabled={loading || isTimeExpired}
+                sx={{ 
+                  mt: 3, 
+                  py: 1.5, 
+                  backgroundColor: isTimeExpired ? '#ccc' : '#0F52BA', 
+                  fontWeight: 600,
+                  '&:hover': {
+                    backgroundColor: isTimeExpired ? '#ccc' : '#0A3C8A'
+                  },
+                  '&:disabled': {
+                    backgroundColor: '#ccc',
+                    color: '#666',
+                    cursor: 'not-allowed'
+                  }
+                }}
               >
-                {loading ? <CircularProgress size={24} color="inherit" /> : 'Tiến hành thanh toán'}
+                {loading ? <CircularProgress size={24} color="inherit" /> : 
+                 isTimeExpired ? 'Hết thời gian thanh toán' : 'Tiến hành thanh toán'}
               </Button>
+              
+              {isTimeExpired && (
+                <Typography 
+                  variant="body2" 
+                  color="error" 
+                  sx={{ mt: 1, textAlign: 'center', fontStyle: 'italic' }}
+                >
+                  Đơn hàng đã hết thời gian thanh toán và sẽ được hủy tự động
+                </Typography>
+              )}
             </Paper>
           </Grid>
           <Grid item xs={12} md={5}>
