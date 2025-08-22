@@ -97,10 +97,60 @@ router.post('/calc-fee-simple', async (req, res) => {
       coupon
     };
     const fee = await calculateShippingFee(token, shopId, feeParams);
-    res.json(fee);
+    // Lấy tỷ giá động từ API nội bộ
+    let usdRate = 0;
+    try {
+      const fetch = require('node-fetch');
+      const rateRes = await fetch('http://localhost:9999/api/ghn/exchange-rate');
+      const rateData = await rateRes.json();
+      if (rateData && rateData.success && rateData.rate) {
+        usdRate = rateData.rate;
+      }
+    } catch (err) {
+      // Nếu lỗi thì dùng tỷ giá mặc định
+    }
+    const data = fee?.data || {};
+    // Tạo object giống GHN, chỉ đổi total và service_fee sang USD
+    const dataCustom = { ...data };
+    if (typeof dataCustom.total === 'number') {
+      dataCustom.total = +(dataCustom.total / usdRate).toFixed(2);
+    }
+    if (typeof dataCustom.service_fee === 'number') {
+      dataCustom.service_fee = +(dataCustom.service_fee / usdRate).toFixed(2);
+    }
+    res.json({
+      code: fee.code,
+      message: fee.message,
+      usdRate,
+      data: dataCustom
+    });
+
   } catch (err) {
     res.status(500).json({ error: err.response ? err.response.data : err.message });
   }
 });
+const fetch = require('node-fetch');
+router.get('/exchange-rate', async (req, res) => {
+  try {
+    // Sử dụng API miễn phí, có thể thay bằng API khác nếu cần
+    const apiUrl = 'https://open.er-api.com/v6/latest/USD';
+    const response = await fetch(apiUrl);
+    const data = await response.json();
+    if (data && data.rates && data.rates.VND) {
+      res.json({
+        success: true,
+        rate: data.rates.VND,
+        source: 'open.er-api.com',
+        updated: data.time_last_update_utc
+      });
+    } else {
+      res.status(500).json({ success: false, error: 'Không lấy được tỷ giá VND.' });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 module.exports = router;
+// Route lấy tỷ giá USD/VND động từ exchangerate-api.com
+
