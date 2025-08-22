@@ -656,12 +656,12 @@ const Checkout = () => {
 
                   <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
                     <Typography variant="body2">Subtotal:</Typography>
-                    <Typography variant="body2">₫{shopGroup.subtotal.toLocaleString()}</Typography>
+                    <Typography variant="body2">${shopGroup.subtotal.toLocaleString()}</Typography>
                   </Box>
 
                   <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
                     <Typography variant="body2">Shipping Fee:</Typography>
-                    <Typography variant="body2">₫{shopGroup.shippingFee.toLocaleString()}</Typography>
+                    <Typography variant="body2">${shopGroup.shippingFee.toLocaleString()}</Typography>
                   </Box>
 
                   <Divider sx={{ my: 1 }} />
@@ -669,7 +669,7 @@ const Checkout = () => {
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                     <Typography variant="body1" fontWeight={600}>Shop Total:</Typography>
                     <Typography variant="body1" fontWeight={700} color="#0F52BA">
-                      ₫{(shopGroup.subtotal + shopGroup.shippingFee).toLocaleString()}
+                      ${(shopGroup.subtotal + shopGroup.shippingFee).toLocaleString()}
                     </Typography>
                   </Box>
                 </Box>
@@ -682,7 +682,7 @@ const Checkout = () => {
                 <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2, color: "success.main" }}>
                   <Typography variant="h6" fontWeight={600}>Discount:</Typography>
                   <Typography variant="h6" fontWeight={700}>
-                    -₫{discount.toLocaleString()}
+                    -${discount.toLocaleString()}
                   </Typography>
                 </Box>
               )}
@@ -691,7 +691,7 @@ const Checkout = () => {
               <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
                 <Typography variant="h6" fontWeight={600}>Grand Total:</Typography>
                 <Typography variant="h6" fontWeight={700} color="#0F52BA">
-                  ₫{grandTotal.toLocaleString()}
+                  ${grandTotal.toLocaleString()}
                 </Typography>
               </Box>
 
