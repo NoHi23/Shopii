@@ -24,7 +24,7 @@ const syncOrderStatus = async (orderId) => {
     // If no items found, return early
     if (!orderItems || orderItems.length === 0) {
       console.log(`No order items found for order ${orderId}`);
-      return;
+      return false;
     }
 
     console.log(`Found ${orderItems.length} items for order ${orderId}`);
@@ -36,33 +36,76 @@ const syncOrderStatus = async (orderId) => {
     }));
     console.log('Item statuses:', JSON.stringify(itemStatuses));
 
-    // Check if all items have status 'shipped'
-    const allItemsShipped = orderItems.every(item => item.status === 'shipped');
-    console.log(`All items shipped: ${allItemsShipped}`);
+    // Get current order
+    const order = await Order.findById(orderId);
+    if (!order) {
+      console.log(`Order ${orderId} not found`);
+      return false;
+    }
 
-    // If all items are shipped, update the order status
-    if (allItemsShipped) {
-      console.log(`Updating order ${orderId} status to 'shipped'`);
+    // Determine order status based on item statuses
+    let newOrderStatus = order.status;
 
-      // Get current order status
-      const order = await Order.findById(orderId);
-      console.log(`Current order status: ${order?.status}`);
+    // Priority order: delivered > shipped > out_for_delivery > in_transit > shipping > processing > rejected > failed > returned > cancelled > pending
+    
+    // Check if any item is delivered
+    if (orderItems.some(item => item.status === 'delivered')) {
+      newOrderStatus = 'delivered';
+    }
+    // Check if all items are shipped
+    else if (orderItems.every(item => item.status === 'shipped')) {
+      newOrderStatus = 'shipped';
+    }
+    // Check if any item is out for delivery
+    else if (orderItems.some(item => item.status === 'out_for_delivery')) {
+      newOrderStatus = 'out_for_delivery';
+    }
+    // Check if any item is in transit
+    else if (orderItems.some(item => item.status === 'in_transit')) {
+      newOrderStatus = 'in_transit';
+    }
+    // Check if any item is shipping
+    else if (orderItems.some(item => item.status === 'shipping')) {
+      newOrderStatus = 'shipping';
+    }
+    // Check if any item is processing
+    else if (orderItems.some(item => item.status === 'processing')) {
+      newOrderStatus = 'processing';
+    }
+    // Check if any item is rejected
+    else if (orderItems.some(item => item.status === 'rejected')) {
+      newOrderStatus = 'rejected';
+    }
+    // Check if any item failed
+    else if (orderItems.some(item => item.status === 'failed')) {
+      newOrderStatus = 'failed';
+    }
+    // Check if any item is returned
+    else if (orderItems.some(item => item.status === 'returned')) {
+      newOrderStatus = 'returned';
+    }
+    // Check if any item is cancelled
+    else if (orderItems.some(item => item.status === 'cancelled')) {
+      newOrderStatus = 'cancelled';
+    }
+    // Default to pending if all items are pending
+    else if (orderItems.every(item => item.status === 'pending')) {
+      newOrderStatus = 'pending';
+    }
 
-      // Only update if status isn't already 'shipped'
-      if (order && order.status !== 'shipped') {
-        const updatedOrder = await Order.findByIdAndUpdate(
-          orderId,
-          { status: 'shipped' },
-          { new: true }
-        );
-        console.log(`Order status updated successfully: ${updatedOrder.status}`);
-        return true;
-      } else {
-        console.log('Order already has shipped status or not found, no update needed');
-        return false;
-      }
+    console.log(`Current order status: ${order.status}, New status: ${newOrderStatus}`);
+
+    // Update order status if it changed
+    if (order.status !== newOrderStatus) {
+      const updatedOrder = await Order.findByIdAndUpdate(
+        orderId,
+        { status: newOrderStatus },
+        { new: true }
+      );
+      console.log(`Order status updated successfully: ${updatedOrder.status}`);
+      return true;
     } else {
-      console.log(`Not all items are shipped yet, order status remains unchanged`);
+      console.log('Order status unchanged');
       return false;
     }
   } catch (error) {
@@ -228,7 +271,7 @@ const getBuyerOrders = async (req, res) => {
 
     // Build query
     const query = { buyerId };
-    if (status && ['pending', 'shipping', 'shipped', 'failed to ship', 'rejected'].includes(status)) {
+    if (status && ['pending', 'processing', 'shipping', 'in_transit', 'out_for_delivery', 'delivered', 'shipped', 'failed', 'rejected', 'cancelled', 'returned'].includes(status)) {
       query.status = status;
     }
 
@@ -333,7 +376,7 @@ const updateOrderItemStatus = async (req, res) => {
     console.log(`Updating order item ${id} status to ${status}`);
 
     // Validate status
-    if (!status || !['pending', 'shipping', 'shipped', 'failed to ship', 'rejected'].includes(status)) {
+    if (!status || !['pending', 'processing', 'shipping', 'in_transit', 'out_for_delivery', 'delivered', 'shipped', 'failed', 'rejected', 'cancelled', 'returned'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
     }
 
@@ -425,4 +468,4 @@ const cancelOrder = async (req, res) => {
   }
 };
 
-module.exports = { createOrder, getBuyerOrders, getOrderDetails, updateOrderItemStatus, cancelOrder };
+module.exports = { createOrder, getBuyerOrders, getOrderDetails, updateOrderItemStatus, cancelOrder, syncOrderStatus };

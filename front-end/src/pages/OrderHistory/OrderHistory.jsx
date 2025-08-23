@@ -173,13 +173,25 @@ const OrderHistory = () => {
     switch (status) {
       case 'pending':
         return 'bg-amber-100 text-amber-800 border-amber-300';
-      case 'shipping':
+      case 'processing':
         return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'shipping':
+        return 'bg-indigo-100 text-indigo-800 border-indigo-300';
+      case 'in_transit':
+        return 'bg-purple-100 text-purple-800 border-purple-300';
+      case 'out_for_delivery':
+        return 'bg-orange-100 text-orange-800 border-orange-300';
+      case 'delivered':
+        return 'bg-green-100 text-green-800 border-green-300';
       case 'shipped':
         return 'bg-emerald-100 text-emerald-800 border-emerald-300';
-      case 'failed to ship':
+      case 'failed':
       case 'rejected':
         return 'bg-rose-100 text-rose-800 border-rose-300';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800 border-red-300';
+      case 'returned':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-300';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-300';
     }
@@ -204,13 +216,25 @@ const OrderHistory = () => {
     switch (status) {
       case 'pending':
         return <FaClock className="mr-1" />;
+      case 'processing':
+        return <FaSpinner className="mr-1" />;
       case 'shipping':
         return <FaShippingFast className="mr-1" />;
+      case 'in_transit':
+        return <FaShippingFast className="mr-1" />;
+      case 'out_for_delivery':
+        return <FaShippingFast className="mr-1" />;
+      case 'delivered':
+        return <FaCheck className="mr-1" />;
       case 'shipped':
         return <FaCheck className="mr-1" />;
-      case 'failed to ship':
+      case 'failed':
       case 'rejected':
         return <span className="mr-1">×</span>;
+      case 'cancelled':
+        return <span className="mr-1">×</span>;
+      case 'returned':
+        return <FaBox className="mr-1" />;
       default:
         return null;
     }
@@ -287,10 +311,16 @@ const OrderHistory = () => {
             >
               <option value="">All Orders</option>
               <option value="pending">Pending</option>
+              <option value="processing">Processing</option>
               <option value="shipping">Shipping</option>
+              <option value="in_transit">In Transit</option>
+              <option value="out_for_delivery">Out for Delivery</option>
+              <option value="delivered">Delivered</option>
               <option value="shipped">Shipped</option>
-              <option value="failed to ship">Failed to Ship</option>
+              <option value="failed">Failed</option>
               <option value="rejected">Rejected</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="returned">Returned</option>
             </select>
             <FaFilter className="absolute left-3.5 top-3.5 text-gray-400" />
           </div>

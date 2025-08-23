@@ -1170,11 +1170,11 @@ exports.updateOrderItemStatus = async (req, res) => {
     const { status } = req.body;
     
     // Kiểm tra status hợp lệ
-    const validStatuses = ["shipping", "rejected"];
+    const validStatuses = ["processing", "shipping", "in_transit", "out_for_delivery", "delivered", "shipped", "rejected", "cancelled", "returned"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ 
         success: false, 
-        message: "Invalid status. Status must be 'shipping' or 'rejected'"
+        message: "Invalid status. Status must be one of: 'processing', 'shipping', 'in_transit', 'out_for_delivery', 'delivered', 'shipped', 'rejected', 'cancelled', 'returned'"
       });
     }
     
@@ -1202,6 +1202,10 @@ exports.updateOrderItemStatus = async (req, res) => {
     orderItem.status = status;
     await orderItem.save();
     
+    // Sync order status based on all items
+    const { syncOrderStatus } = require('./orderController');
+    await syncOrderStatus(orderItem.orderId);
+    
     // Nếu status là shipping, tạo ShippingInfo mới
     let shippingInfo = null;
     if (status === "shipping") {
@@ -1219,6 +1223,24 @@ exports.updateOrderItemStatus = async (req, res) => {
           orderItemId,
           trackingNumber: `TRK-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
           status: "shipping"
+        });
+        await shippingInfo.save();
+      }
+    } else if (status === "processing") {
+      // Nếu status là processing, tạo ShippingInfo với status pending
+      const existingShippingInfo = await ShippingInfo.findOne({ orderItemId });
+      
+      if (existingShippingInfo) {
+        // Cập nhật shipping info hiện có
+        existingShippingInfo.status = "pending";
+        await existingShippingInfo.save();
+        shippingInfo = existingShippingInfo;
+      } else {
+        // Tạo shipping info mới với tracking number ngẫu nhiên
+        shippingInfo = new ShippingInfo({
+          orderItemId,
+          trackingNumber: `TRK-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+          status: "pending"
         });
         await shippingInfo.save();
       }
