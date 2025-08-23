@@ -12,18 +12,31 @@ const cancelExpiredOrders = async () => {
   try {
     console.log('Running scheduled order cancellation task...');
     
-    // Tìm các đơn hàng pending được tạo cách đây hơn 5 phút
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    // Tìm các đơn hàng pending được tạo cách đây hơn 30 phút (tăng từ 5 phút)
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
     
-         const expiredOrders = await Order.find({
-       status: 'pending',
-       createdAt: { $lt: fiveMinutesAgo }
-     });
+    const expiredOrders = await Order.find({
+      status: 'pending',
+      createdAt: { $lt: thirtyMinutesAgo }
+    });
 
     console.log(`Found ${expiredOrders.length} expired orders to cancel`);
 
     for (const order of expiredOrders) {
       try {
+        // Kiểm tra xem có payment nào đang pending không
+        const Payment = require('../models/Payment');
+        const pendingPayment = await Payment.findOne({
+          orderId: order._id,
+          status: { $in: ['pending', 'processing'] }
+        });
+
+        // Nếu có payment đang pending, bỏ qua đơn hàng này
+        if (pendingPayment) {
+          console.log(`Skipping order ${order._id} - has pending payment`);
+          continue;
+        }
+
         // Cập nhật trạng thái đơn hàng thành cancelled
         await Order.findByIdAndUpdate(order._id, { status: 'cancelled' });
 
@@ -42,8 +55,6 @@ const cancelExpiredOrders = async () => {
             await inventory.save();
           }
         }
-
-        
 
         console.log(`Successfully cancelled order ${order._id}`);
       } catch (error) {

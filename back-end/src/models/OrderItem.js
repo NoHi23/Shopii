@@ -7,7 +7,7 @@ const orderItemSchema = new Schema(
     productId: { type: Schema.Types.ObjectId, ref: "Product", required: true },
     status: {
       type: String,
-      enum: ["pending", "shipping", "shipped", "failed to ship", "rejected"],
+      enum: ["pending", "processing", "shipping", "in_transit", "out_for_delivery", "delivered", "shipped", "failed", "rejected", "cancelled", "returned"],
       default: "pending",
     },
     quantity: { type: Number, required: true },

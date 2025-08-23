@@ -12,10 +12,12 @@ const userController = require("../controllers/userController");
 const imageRoutes = require("../routes/imageRoutes");
 const { authMiddleware } = require("../middleware/auth.middleware");
 const ghnRoutes = require('../routes/ghnRoutes');
+const shippingRoutes = require('../routes/shippingRoutes');
 
 router.use("/admin", adminRouter);
 router.use("/seller", sellerRouter);
 router.use('/ghn', ghnRoutes);
+router.use('/shipping', shippingRoutes);
 
 // Routes cho đăng ký và đăng nhập
 router.post("/register", authController.register);

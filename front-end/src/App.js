@@ -61,6 +61,7 @@ import ManageStore from "./pages/DashboardAdmin/ManageShop/ManageStore";
 import ManageProductA from "./pages/DashboardAdmin/ManageProduct/ManageProduct";
 import ManageVoucher from "./pages/DashboardAdmin/ManageVoucher/ManageVoucher";
 import AdminDashboardLayout from "./pages/DashboardAdmin/ManagerDashboardAdminLaydout";
+import ShippingDemo from "./pages/ShippingDemo/ShippingDemo";
 
 
 const Layout = () => {
@@ -108,6 +109,7 @@ const router = createBrowserRouter(
         <Route path="/disputes" element={<MyDisputes />}></Route>
         <Route path="/create-dispute/:orderItemId" element={<CreateDisputeForm />}></Route>
         <Route path="/return-requests" element={<ReturnRequestsList />}></Route>
+        <Route path="/shipping-demo" element={<ShippingDemo />}></Route>
       </Route>
 
       <Route path="/" element={<ManagerDashboardSellerLaydout />} errorElement={<ErrorPage />}>
