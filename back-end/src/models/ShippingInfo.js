@@ -14,6 +14,7 @@ const shippingInfoSchema = new Schema(
         "shipping",
         "in_transit",
         "out_for_delivery",
+        "shipped",
         "delivered",
         "failed",
         "returned"

@@ -753,7 +753,7 @@ export default function ManageOrderHistory() {
                 <Box>
                   <Typography fontWeight={600}>Total paid (shipped):</Typography>
                   <Typography color="success.main" fontWeight={600}>
-                    ${shippedAmount.toLocaleString()}
+                                          ${shippedAmount.toLocaleString()}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {shipped} shipped items
@@ -811,9 +811,9 @@ export default function ManageOrderHistory() {
             </DialogTitle>
             <DialogContent sx={{ pb: 2 }}>
               <Typography>
-                {statusToUpdate === "shipping" 
-                  ? "Are you sure you want to mark this order as shipping? A shipping record with tracking number will be created."
-                  : "Are you sure you want to reject this order? This action cannot be undone."}
+                        {statusToUpdate === "shipping"
+          ? "Are you sure you want to mark this order as shipping? A shipping record with tracking number will be created."
+          : "Are you sure you want to reject this order? This action cannot be undone."}
               </Typography>
               {selectedOrderItem && (
                 <Box 
@@ -854,7 +854,7 @@ export default function ManageOrderHistory() {
                 disabled={loadingAction}
                 startIcon={loadingAction ? <CircularProgress size={16} /> : null}
               >
-                {loadingAction ? "Processing..." : statusToUpdate === "shipping" ? "Confirm Shipping" : "Confirm Rejection"}
+                {loadingAction ? "Processing..." : statusToUpdate === "delivered" ? "Confirm Delivered" : "Confirm Rejection"}
               </Button>
             </DialogActions>
           </Dialog>

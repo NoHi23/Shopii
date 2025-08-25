@@ -847,14 +847,14 @@ exports.getSalesReport = async (req, res) => {
     const uniqueCustomers = uniqueCustomerList.length;
 
 
-    const productsShipped = [...new Set(filteredItems.map(i => i.productId.toString()))].length;
+        const productsShipped = [...new Set(filteredItems.map(i => i.productId.toString()))].length;
 
     // --- Revenue by Category ---
     const categoryRevenueMap = {};
     filteredItems.forEach(item => {
       const product = products.find(p => p._id.equals(item.productId));
       const catName = product?.categoryId?.name || "Other";
-categoryRevenueMap[catName] = (categoryRevenueMap[catName] || 0) + (item.unitPrice * item.quantity);
+      categoryRevenueMap[catName] = (categoryRevenueMap[catName] || 0) + (item.unitPrice * item.quantity);
     });
     // Format for PieChart
     const revenueByCategory = Object.entries(categoryRevenueMap).map(([name, value]) => ({
@@ -1184,11 +1184,11 @@ exports.updateOrderItemStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: "Order item not found" });
     }
     
-    // Kiểm tra xem order item đã ở trạng thái shipped chưa
-    if (orderItem.status === "shipped") {
+    // Kiểm tra xem order item đã ở trạng thái delivered chưa
+    if (orderItem.status === "delivered") {
       return res.status(400).json({ 
         success: false, 
-        message: "Cannot update status. Order item has already been shipped." 
+        message: "Cannot update status. Order item has already been delivered." 
       });
     }
     
@@ -1311,11 +1311,11 @@ exports.updateShippingStatus = async (req, res) => {
     const { status } = req.body;
     
     // Validate status
-    const validShippingStatuses = ["shipping", "shipped", "failed to ship"];
+    const validShippingStatuses = ["shipping", "delivered", "failed to ship"];
     if (!validShippingStatuses.includes(status)) {
       return res.status(400).json({ 
         success: false, 
-        message: "Invalid shipping status. Status must be 'shipping', 'shipped', or 'failed to ship'"
+        message: "Invalid shipping status. Status must be 'shipping', 'delivered', or 'failed to ship'"
       });
     }
     
@@ -1331,11 +1331,11 @@ exports.updateShippingStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: "Order item not found" });
     }
     
-    // Kiểm tra xem order item đã ở trạng thái shipped chưa
-    if (orderItem.status === "shipped") {
+    // Kiểm tra xem order item đã ở trạng thái delivered chưa
+    if (orderItem.status === "delivered") {
       return res.status(400).json({ 
         success: false, 
-        message: "Cannot update status. Order item has already been shipped." 
+        message: "Cannot update status. Order item has already been delivered." 
       });
     }
     
@@ -1352,8 +1352,8 @@ exports.updateShippingStatus = async (req, res) => {
     // Update corresponding OrderItem status
     let orderItemStatus;
     switch(status) {
-      case "shipped":
-        orderItemStatus = "shipped";
+      case "delivered":
+        orderItemStatus = "delivered";
         break;
       case "shipping":
         orderItemStatus = "shipping";

@@ -139,7 +139,7 @@ const updateOrderAfterPayment = async (orderId) => {
     // Cập nhật các OrderItems sang trạng thái shipping
     let updatedCount = 0;
     for (const item of orderItems) {
-      item.status = "shipping";
+              item.status = "shipping";
       await item.save();
       updatedCount++;
     }

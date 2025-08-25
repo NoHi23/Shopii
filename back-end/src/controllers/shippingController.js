@@ -93,6 +93,7 @@ exports.updateShippingStatus = async (req, res) => {
       "shipping",
       "in_transit",
       "out_for_delivery",
+      "shipped",
       "delivered",
       "failed",
       "returned"
@@ -163,6 +164,9 @@ exports.updateShippingStatus = async (req, res) => {
       case "in_transit":
       case "out_for_delivery":
         orderItemStatus = "shipping";
+        break;
+      case "shipped":
+        orderItemStatus = "shipped";
         break;
       case "delivered":
         orderItemStatus = "delivered";

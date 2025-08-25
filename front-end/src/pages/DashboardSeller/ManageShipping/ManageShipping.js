@@ -10,7 +10,7 @@ const { Option } = Select;
 const statusColors = {
   pending: "orange",
   shipping: "blue",
-  shipped: "green",
+  delivered: "green",
   "failed to ship": "red",
   rejected: "red",
 };
@@ -112,7 +112,7 @@ const ManageShipping = () => {
   // Open status update modal
   const showStatusModal = (record) => {
     setSelectedShipment(record);
-    setSelectedStatus(record.shippingInfo?.status || "shipping");
+          setSelectedStatus(record.shippingInfo?.status || "shipping");
     setStatusModalVisible(true);
   };
 
@@ -331,8 +331,8 @@ const ManageShipping = () => {
             onChange={(value) => setSelectedStatus(value)}
             style={{ width: "100%" }}
           >
-            <Option value="shipping">SHIPPING</Option>
-            <Option value="shipped">SHIPPED</Option>
+                          <Option value="shipping">SHIPPING</Option>
+                          <Option value="shipped">SHIPPED</Option>
             <Option value="failed to ship">FAILED TO SHIP</Option>
           </Select>
         </div>

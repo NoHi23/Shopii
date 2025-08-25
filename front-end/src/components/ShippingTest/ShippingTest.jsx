@@ -69,7 +69,7 @@ const ShippingTest = () => {
     'shipping',
     'in_transit',
     'out_for_delivery',
-    'delivered',
+    'shipped',
     'failed',
     'returned'
   ];
@@ -527,40 +527,64 @@ const ShippingTest = () => {
         <Card sx={{ mt: 3 }}>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Danh sách vận chuyển
+              Danh sách vận chuyển (Nhóm theo Order)
             </Typography>
-            <List>
-              {shipments.map((shipment, index) => (
-                <React.Fragment key={index}>
-                  <ListItem>
-                    <ListItemText
-                      primary={
-                        <Box>
-                          <Typography variant="subtitle1">
-                            {shipment.orderItemId?.productId?.title}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Tracking: {shipment.trackingNumber}
-                          </Typography>
-                          <Chip
-                            label={shipment.status}
-                            color={getStatusColor(shipment.status)}
-                            size="small"
-                            sx={{ mt: 1 }}
+            {(() => {
+              // Nhóm shipments theo Order ID
+              const groupedShipments = shipments.reduce((groups, shipment) => {
+                const orderId = shipment.orderItemId?.orderId?._id;
+                if (!groups[orderId]) {
+                  groups[orderId] = {
+                    orderId,
+                    buyer: shipment.orderItemId?.orderId?.buyerId,
+                    shipments: []
+                  };
+                }
+                groups[orderId].shipments.push(shipment);
+                return groups;
+              }, {});
+
+              return Object.values(groupedShipments).map((group, groupIndex) => (
+                <Box key={group.orderId} sx={{ mb: 3 }}>
+                  <Typography variant="h6" sx={{ mb: 2, color: 'primary.main' }}>
+                    Order: {group.orderId?.slice(-8)} | Buyer: {group.buyer?.fullname || 'N/A'}
+                  </Typography>
+                  <List>
+                    {group.shipments.map((shipment, index) => (
+                      <React.Fragment key={shipment._id}>
+                        <ListItem>
+                          <ListItemText
+                            primary={
+                              <Box>
+                                <Typography variant="subtitle1">
+                                  {shipment.orderItemId?.productId?.title}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  Tracking: {shipment.trackingNumber}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  Quantity: {shipment.orderItemId?.quantity}
+                                </Typography>
+                                <Chip
+                                  label={shipment.status}
+                                  color={getStatusColor(shipment.status)}
+                                  size="small"
+                                  sx={{ mt: 1 }}
+                                />
+                              </Box>
+                            }
                           />
-                        </Box>
-                      }
-                      secondary={
-                        <Typography variant="body2">
-                          Buyer: {shipment.orderItemId?.orderId?.buyerId?.fullname}
-                        </Typography>
-                      }
-                    />
-                  </ListItem>
-                  {index < shipments.length - 1 && <Divider />}
-                </React.Fragment>
-              ))}
-            </List>
+                        </ListItem>
+                        {index < group.shipments.length - 1 && <Divider />}
+                      </React.Fragment>
+                    ))}
+                  </List>
+                  {groupIndex < Object.values(groupedShipments).length - 1 && (
+                    <Divider sx={{ my: 2 }} />
+                  )}
+                </Box>
+              ));
+            })()}
           </CardContent>
         </Card>
       )}
@@ -581,74 +605,94 @@ const ShippingTest = () => {
               Không có order items nào. Hãy tạo đơn hàng trước!
             </Typography>
           ) : (
-            <Grid container spacing={2}>
-              {orderItems.map((item) => (
-                <Grid item xs={12} key={item._id}>
-                  <Card 
-                    sx={{ 
-                      cursor: 'pointer',
-                      border: item.hasShippingInfo ? '2px solid #ff9800' : '1px solid #e0e0e0',
-                      '&:hover': { borderColor: '#1976d2' }
-                    }}
-                    onClick={() => handleSelectOrderItem(item)}
-                  >
-                    <CardContent>
-                      <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={2}>
-                          {item.productId?.image ? (
-                            <CardMedia
-                              component="img"
-                              image={item.productId.image}
-                              alt={item.productId.title}
-                              sx={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 1 }}
-                            />
-                          ) : (
-                            <Avatar sx={{ width: 60, height: 60 }}>
-                              📦
-                            </Avatar>
-                          )}
-                        </Grid>
-                        <Grid item xs={7}>
-                          <Typography variant="h6" noWrap>
-                            {item.productId?.title || 'Sản phẩm không tên'}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Buyer: {item.orderId?.buyerId?.fullname || 'Không xác định'}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Order ID: {item.orderId?._id || 'N/A'}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Quantity: {item.quantity} | Price: ${item.price}
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={3}>
-                          <Box sx={{ textAlign: 'right' }}>
-                            <Chip
-                              label={item.status}
-                              color={getStatusColor(item.status)}
-                              size="small"
-                              sx={{ mb: 1 }}
-                            />
-                            {item.hasShippingInfo && (
-                              <Chip
-                                label="Đã có tracking"
-                                color="warning"
-                                size="small"
-                                variant="outlined"
-                              />
-                            )}
-                            <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                              ID: {item._id.slice(-8)}
-                            </Typography>
-                          </Box>
-                        </Grid>
+            (() => {
+              // Nhóm order items theo Order ID
+              const groupedOrderItems = orderItems.reduce((groups, item) => {
+                const orderId = item.orderId?._id;
+                if (!groups[orderId]) {
+                  groups[orderId] = {
+                    orderId,
+                    buyer: item.orderId?.buyerId,
+                    items: []
+                  };
+                }
+                groups[orderId].items.push(item);
+                return groups;
+              }, {});
+
+              return Object.values(groupedOrderItems).map((group, groupIndex) => (
+                <Box key={group.orderId} sx={{ mb: 3 }}>
+                  <Typography variant="h6" sx={{ mb: 2, color: 'primary.main', borderBottom: '2px solid #e0e0e0', pb: 1 }}>
+                    Order: {group.orderId?.slice(-8)} | Buyer: {group.buyer?.fullname || 'N/A'}
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {group.items.map((item) => (
+                      <Grid item xs={12} key={item._id}>
+                        <Card 
+                          sx={{ 
+                            cursor: 'pointer',
+                            border: item.hasShippingInfo ? '2px solid #ff9800' : '1px solid #e0e0e0',
+                            '&:hover': { borderColor: '#1976d2' }
+                          }}
+                          onClick={() => handleSelectOrderItem(item)}
+                        >
+                          <CardContent>
+                            <Grid container spacing={2} alignItems="center">
+                              <Grid item xs={2}>
+                                {item.productId?.image ? (
+                                  <CardMedia
+                                    component="img"
+                                    image={item.productId.image}
+                                    alt={item.productId.title}
+                                    sx={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 1 }}
+                                  />
+                                ) : (
+                                  <Avatar sx={{ width: 60, height: 60 }}>
+                                    📦
+                                  </Avatar>
+                                )}
+                              </Grid>
+                              <Grid item xs={7}>
+                                <Typography variant="h6" noWrap>
+                                  {item.productId?.title || 'Sản phẩm không tên'}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  Quantity: {item.quantity} | Price: ${item.price}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  Item ID: {item._id?.slice(-8)}
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={3}>
+                                <Box sx={{ textAlign: 'right' }}>
+                                  <Chip
+                                    label={item.status}
+                                    color={getStatusColor(item.status)}
+                                    size="small"
+                                    sx={{ mb: 1 }}
+                                  />
+                                  {item.hasShippingInfo && (
+                                    <Chip
+                                      label="Đã có tracking"
+                                      color="warning"
+                                      size="small"
+                                      variant="outlined"
+                                    />
+                                  )}
+                                </Box>
+                              </Grid>
+                            </Grid>
+                          </CardContent>
+                        </Card>
                       </Grid>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
+                    ))}
+                  </Grid>
+                  {groupIndex < Object.values(groupedOrderItems).length - 1 && (
+                    <Divider sx={{ my: 2 }} />
+                  )}
+                </Box>
+              ));
+            })()
           )}
         </DialogContent>
         <DialogActions>

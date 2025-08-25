@@ -938,8 +938,8 @@ exports.getAdminReport = async (req, res) => {
       Product.countDocuments({
         createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
       }),
-      Order.aggregate([
-        { $match: { ...dateFilter, status: { $in: ["shipped"] } } },
+              Order.aggregate([
+          { $match: { ...dateFilter, status: { $in: ["shipped"] } } },
         { $group: { _id: null, totalRevenue: { $sum: "$totalPrice" } } },
       ]),
       Order.aggregate([
