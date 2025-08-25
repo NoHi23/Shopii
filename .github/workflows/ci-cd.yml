@@ -1,0 +1,195 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop, duong ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # Backend Testing & Building
+  backend:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: back-end/package-lock.json
+        
+    - name: Install backend dependencies
+      working-directory: ./back-end
+      run: npm ci
+      
+    - name: Run backend tests
+      working-directory: ./back-end
+      run: npm test
+      
+    - name: Build backend
+      working-directory: ./back-end
+      run: |
+        npm run build || echo "No build script found, skipping build"
+        
+    - name: Upload backend artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-${{ matrix.node-version }}
+        path: back-end/
+        retention-days: 7
+
+  # Frontend Testing & Building
+  frontend:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: front-end/package-lock.json
+        
+    - name: Install frontend dependencies
+      working-directory: ./front-end
+      run: npm ci
+      
+    - name: Run frontend tests
+      working-directory: ./front-end
+      run: npm test -- --watchAll=false --coverage
+      
+    - name: Build frontend
+      working-directory: ./front-end
+      run: npm run build
+      
+    - name: Upload frontend artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-build-${{ matrix.node-version }}
+        path: front-end/build/
+        retention-days: 7
+
+  # Security Scanning
+  security:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Run npm audit
+      working-directory: ./back-end
+      run: npm audit --audit-level=moderate
+      
+    - name: Run npm audit for frontend
+      working-directory: ./front-end
+      run: npm audit --audit-level=moderate
+
+  # Code Quality
+  code-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        
+    - name: Install ESLint
+      run: npm install -g eslint
+      
+    - name: Run ESLint on backend
+      working-directory: ./back-end
+      run: |
+        npx eslint . --ext .js || echo "ESLint not configured, skipping"
+        
+    - name: Run ESLint on frontend
+      working-directory: ./front-end
+      run: |
+        npx eslint . --ext .js,.jsx || echo "ESLint not configured, skipping"
+
+  # Deploy to Staging (on develop branch)
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, security, code-quality]
+    if: github.ref == 'refs/heads/develop'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        
+    - name: Download backend artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: backend-18.x
+        path: ./back-end
+        
+    - name: Download frontend artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: frontend-build-18.x
+        path: ./front-end/build
+        
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment..."
+        # Add your staging deployment commands here
+        # Example: rsync, docker push, etc.
+
+  # Deploy to Production (on main branch)
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, security, code-quality]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        
+    - name: Download backend artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: backend-18.x
+        path: ./back-end
+        
+    - name: Download frontend artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: frontend-build-18.x
+        path: ./front-end/build
+        
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production environment..."
+        # Add your production deployment commands here
+        # Example: rsync, docker push, etc.

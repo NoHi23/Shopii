@@ -50,6 +50,19 @@ const ShippingTest = () => {
   const [orderItems, setOrderItems] = useState([]);
   const [showOrderItemsModal, setShowOrderItemsModal] = useState(false);
 
+  // Load dữ liệu từ localStorage khi component mount
+  useEffect(() => {
+    const savedShippingInfoId = localStorage.getItem('lastShippingInfoId');
+    const savedOrderItemId = localStorage.getItem('lastOrderItemId');
+    
+    if (savedShippingInfoId) {
+      setShippingInfoId(savedShippingInfoId);
+    }
+    if (savedOrderItemId) {
+      setOrderItemId(savedOrderItemId);
+    }
+  }, []);
+
   const statusOptions = [
     'pending',
     'processing',
@@ -68,6 +81,16 @@ const ShippingTest = () => {
       const response = await createTrackingNumber(orderItemId, token);
       setResult(response);
       setShippingInfoId(response.data.shippingInfo._id);
+      
+      // Lưu vào localStorage để không bị mất khi reload
+      localStorage.setItem('lastShippingInfoId', response.data.shippingInfo._id);
+      localStorage.setItem('lastOrderItemId', orderItemId);
+      
+      // Hiển thị thông báo thành công
+      setResult({
+        ...response,
+        message: `✅ Tạo mã vận đơn thành công! Shipping Info ID: ${response.data.shippingInfo._id}`
+      });
     } catch (err) {
       setError(err.message);
     }
@@ -82,7 +105,10 @@ const ShippingTest = () => {
       if (notes) updateData.notes = notes;
       
       const response = await updateShippingStatus(shippingInfoId, updateData, token);
-      setResult(response);
+      setResult({
+        ...response,
+        message: `✅ Cập nhật trạng thái thành công! Status: ${status}`
+      });
     } catch (err) {
       setError(err.message);
     }
@@ -157,7 +183,22 @@ const ShippingTest = () => {
       
       // Auto-fill shipping info ID if there's only one
       if (response.data && response.data.shippingInfos && response.data.shippingInfos.length === 1) {
-        setShippingInfoId(response.data.shippingInfos[0]._id);
+        const shippingInfo = response.data.shippingInfos[0];
+        setShippingInfoId(shippingInfo._id);
+        setResult({
+          ...response,
+          message: `🔍 Tìm thấy 1 shipping info! Đã tự động điền ID: ${shippingInfo._id}`
+        });
+      } else if (response.data && response.data.shippingInfos && response.data.shippingInfos.length > 1) {
+        setResult({
+          ...response,
+          message: `🔍 Tìm thấy ${response.data.shippingInfos.length} shipping infos. Vui lòng chọn ID từ danh sách bên dưới.`
+        });
+      } else {
+        setResult({
+          ...response,
+          message: "🔍 Không tìm thấy shipping info nào. Hãy tạo mã vận đơn trước!"
+        });
       }
     } catch (err) {
       setError(err.message);
@@ -184,6 +225,30 @@ const ShippingTest = () => {
       <Typography variant="h4" gutterBottom>
         Shipping API Test
       </Typography>
+      
+      {/* Hiển thị thông tin đã lưu */}
+      {(localStorage.getItem('lastShippingInfoId') || localStorage.getItem('lastOrderItemId')) && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <Typography variant="body2">
+            📝 Dữ liệu đã lưu: 
+            {localStorage.getItem('lastOrderItemId') && ` Order Item ID: ${localStorage.getItem('lastOrderItemId').slice(-8)}`}
+            {localStorage.getItem('lastShippingInfoId') && ` | Shipping Info ID: ${localStorage.getItem('lastShippingInfoId').slice(-8)}`}
+          </Typography>
+          <Button 
+            size="small" 
+            onClick={() => {
+              localStorage.removeItem('lastShippingInfoId');
+              localStorage.removeItem('lastOrderItemId');
+              setShippingInfoId('');
+              setOrderItemId('');
+              setResult(null);
+            }}
+            sx={{ mt: 1 }}
+          >
+            🗑️ Xóa dữ liệu đã lưu
+          </Button>
+        </Alert>
+      )}
       
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -242,6 +307,14 @@ const ShippingTest = () => {
                 sx={{ mb: 2 }}
                 helperText="Nhập Shipping Info ID hoặc sử dụng debug để tự động điền"
               />
+              <Button
+                variant="outlined"
+                onClick={handleDebugShippingInfo}
+                fullWidth
+                sx={{ mb: 2 }}
+              >
+                🔍 Debug Shipping Info (tự động điền ID)
+              </Button>
               <FormControl fullWidth sx={{ mb: 2 }}>
                 <InputLabel>Trạng thái</InputLabel>
                 <Select
@@ -329,7 +402,15 @@ const ShippingTest = () => {
                 <Button
                   variant="outlined"
                   color="success"
-                  onClick={() => setShippingInfoId(result.data.shippingInfos[0]._id)}
+                  onClick={() => {
+                    const id = result.data.shippingInfos[0]._id;
+                    setShippingInfoId(id);
+                    navigator.clipboard.writeText(id);
+                    setResult({
+                      ...result,
+                      message: `📋 Đã copy Shipping Info ID: ${id}`
+                    });
+                  }}
                   fullWidth
                 >
                   📋 Copy Shipping Info ID: {result.data.shippingInfos[0]._id.slice(-8)}
@@ -347,6 +428,60 @@ const ShippingTest = () => {
             <Typography variant="h6" gutterBottom>
               Kết quả API
             </Typography>
+            
+            {/* Hiển thị thông báo */}
+            {result.message && (
+              <Alert severity="success" sx={{ mb: 2 }}>
+                {result.message}
+              </Alert>
+            )}
+            
+            {/* Hiển thị thông tin chi tiết nếu có */}
+            {result.data && (
+              <Box sx={{ mb: 2 }}>
+                {result.data.shippingInfo && (
+                  <Alert severity="info" sx={{ mb: 1 }}>
+                    <Typography variant="body2">
+                      <strong>Shipping Info ID:</strong> {result.data.shippingInfo._id}<br/>
+                      <strong>Tracking Number:</strong> {result.data.shippingInfo.trackingNumber}<br/>
+                      <strong>Status:</strong> {result.data.shippingInfo.status}
+                    </Typography>
+                  </Alert>
+                )}
+                
+                {result.data.shippingInfos && result.data.shippingInfos.length > 0 && (
+                  <Alert severity="info" sx={{ mb: 1 }}>
+                    <Typography variant="body2">
+                      <strong>Tìm thấy {result.data.shippingInfos.length} shipping infos:</strong>
+                    </Typography>
+                    {result.data.shippingInfos.map((info, index) => (
+                      <Box key={info._id} sx={{ mt: 1, p: 1, bgcolor: 'background.paper', borderRadius: 1 }}>
+                        <Typography variant="body2">
+                          <strong>ID:</strong> {info._id} | 
+                          <strong>Tracking:</strong> {info.trackingNumber} | 
+                          <strong>Status:</strong> {info.status}
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => {
+                            setShippingInfoId(info._id);
+                            setResult({
+                              ...result,
+                              message: `✅ Đã tự động điền Shipping Info ID: ${info._id}`
+                            });
+                          }}
+                          sx={{ mt: 1 }}
+                        >
+                          📋 Sử dụng ID này
+                        </Button>
+                      </Box>
+                    ))}
+                  </Alert>
+                )}
+              </Box>
+            )}
+            
             <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
               <pre style={{ overflow: 'auto', maxHeight: '400px' }}>
                 {JSON.stringify(result, null, 2)}

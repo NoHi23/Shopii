@@ -1,0 +1,184 @@
+stages:
+  - test
+  - build
+  - security
+  - deploy
+
+variables:
+  NODE_VERSION: "18"
+  BACKEND_DIR: "back-end"
+  FRONTEND_DIR: "front-end"
+
+# Cache dependencies
+cache:
+  paths:
+    - back-end/node_modules/
+    - front-end/node_modules/
+
+# Backend Testing
+backend-test:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  script:
+    - cd ${BACKEND_DIR}
+    - npm ci
+    - npm test
+  artifacts:
+    paths:
+      - ${BACKEND_DIR}/
+    expire_in: 1 week
+  only:
+    - main
+    - develop
+    - duong
+    - merge_requests
+
+# Frontend Testing
+frontend-test:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  script:
+    - cd ${FRONTEND_DIR}
+    - npm ci
+    - npm test -- --watchAll=false --coverage
+  artifacts:
+    paths:
+      - ${FRONTEND_DIR}/coverage/
+    expire_in: 1 week
+  only:
+    - main
+    - develop
+    - duong
+    - merge_requests
+
+# Backend Build
+backend-build:
+  stage: build
+  image: node:${NODE_VERSION}-alpine
+  dependencies:
+    - backend-test
+  script:
+    - cd ${BACKEND_DIR}
+    - npm ci
+    - npm run build || echo "No build script found, skipping build"
+  artifacts:
+    paths:
+      - ${BACKEND_DIR}/
+    expire_in: 1 week
+  only:
+    - main
+    - develop
+    - duong
+
+# Frontend Build
+frontend-build:
+  stage: build
+  image: node:${NODE_VERSION}-alpine
+  dependencies:
+    - frontend-test
+  script:
+    - cd ${FRONTEND_DIR}
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - ${FRONTEND_DIR}/build/
+    expire_in: 1 week
+  only:
+    - main
+    - develop
+    - duong
+
+# Security Scanning
+security-scan:
+  stage: security
+  image: node:${NODE_VERSION}-alpine
+  dependencies:
+    - backend-build
+    - frontend-build
+  script:
+    - echo "Running security scans..."
+    - cd ${BACKEND_DIR}
+    - npm audit --audit-level=moderate || true
+    - cd ../${FRONTEND_DIR}
+    - npm audit --audit-level=moderate || true
+  allow_failure: true
+  only:
+    - main
+    - develop
+    - duong
+
+# Code Quality Check
+code-quality:
+  stage: security
+  image: node:${NODE_VERSION}-alpine
+  script:
+    - echo "Running code quality checks..."
+    - cd ${BACKEND_DIR}
+    - npx eslint . --ext .js || echo "ESLint not configured for backend"
+    - cd ../${FRONTEND_DIR}
+    - npx eslint . --ext .js,.jsx || echo "ESLint not configured for frontend"
+  allow_failure: true
+  only:
+    - main
+    - develop
+    - duong
+
+# Deploy to Staging
+deploy-staging:
+  stage: deploy
+  image: alpine:latest
+  dependencies:
+    - backend-build
+    - frontend-build
+    - security-scan
+    - code-quality
+  script:
+    - echo "Deploying to staging environment..."
+    - echo "Backend artifacts available at: ${BACKEND_DIR}/"
+    - echo "Frontend artifacts available at: ${FRONTEND_DIR}/build/"
+    # Add your staging deployment commands here
+    # Example:
+    # - apk add --no-cache openssh-client
+    # - eval $(ssh-agent -s)
+    # - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    # - mkdir -p ~/.ssh
+    # - chmod 700 ~/.ssh
+    # - ssh-keyscan your-staging-server.com >> ~/.ssh/known_hosts
+    # - rsync -avz --delete ${BACKEND_DIR}/ user@your-staging-server.com:/path/to/backend/
+    # - rsync -avz --delete ${FRONTEND_DIR}/build/ user@your-staging-server.com:/path/to/frontend/
+  environment:
+    name: staging
+    url: https://staging.shopii.com
+  only:
+    - develop
+
+# Deploy to Production
+deploy-production:
+  stage: deploy
+  image: alpine:latest
+  dependencies:
+    - backend-build
+    - frontend-build
+    - security-scan
+    - code-quality
+  script:
+    - echo "Deploying to production environment..."
+    - echo "Backend artifacts available at: ${BACKEND_DIR}/"
+    - echo "Frontend artifacts available at: ${FRONTEND_DIR}/build/"
+    # Add your production deployment commands here
+    # Example:
+    # - apk add --no-cache openssh-client
+    # - eval $(ssh-agent -s)
+    # - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    # - mkdir -p ~/.ssh
+    # - chmod 700 ~/.ssh
+    # - ssh-keyscan your-production-server.com >> ~/.ssh/known_hosts
+    # - rsync -avz --delete ${BACKEND_DIR}/ user@your-production-server.com:/path/to/backend/
+    # - rsync -avz --delete ${FRONTEND_DIR}/build/ user@your-production-server.com:/path/to/frontend/
+  environment:
+    name: production
+    url: https://shopii.com
+  when: manual
+  only:
+    - main

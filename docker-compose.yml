@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:6.0
+    container_name: shopii-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: shopii
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./db:/docker-entrypoint-initdb.d
+    networks:
+      - shopii-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./back-end
+      dockerfile: Dockerfile
+    container_name: shopii-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://admin:password123@mongodb:27017/shopii?authSource=admin
+      JWT_SECRET: your-super-secret-jwt-key
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongodb
+    networks:
+      - shopii-network
+    volumes:
+      - ./back-end/uploads:/app/uploads
+
+  # Frontend React App
+  frontend:
+    build:
+      context: ./front-end
+      dockerfile: Dockerfile
+    container_name: shopii-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - shopii-network
+
+  # Redis (for caching and sessions)
+  redis:
+    image: redis:7-alpine
+    container_name: shopii-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - shopii-network
+
+  # Nginx Reverse Proxy (optional)
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: shopii-nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx-proxy.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - shopii-network
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  shopii-network:
+    driver: bridge
